@@ -1,0 +1,5 @@
+{
+  "name": "Mermaid Chart Studio",
+  "description": "A powerful and intuitive web-based editor to create, visualize, and manage Mermaid.js diagrams. Features a live preview, theme customization, a visual-to-code builder, a diagram library, and export options for SVG/PNG.",
+  "requestFramePermissions": []
+}
