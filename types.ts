@@ -21,6 +21,14 @@ export interface LogEntry {
     timestamp: string;
 }
 
+export interface DiagramObject {
+    id: string;
+    label: string;
+    // FIX: Add optional sourceId and targetId for edge objects.
+    sourceId?: string;
+    targetId?: string;
+}
+
 export interface SyntaxExplanation {
     title: string;
     description: string;
