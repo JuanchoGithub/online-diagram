@@ -214,7 +214,13 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
         endPoint: { x: number; y: number } | null;
     }>({ startNodeId: null, startPoint: null, endPoint: null });
     const [sidebarSize, setSidebarSize] = useState(25); // In percentage
-    const [isDragging, setIsDragging] = useState(false);
+    const [isResizing, setIsResizing] = useState(false);
+    
+    // Pan and Zoom state
+    const [isPanMode, setIsPanMode] = useState(false);
+    const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
+    const [isPanning, setIsPanning] = useState(false);
+    const [startPoint, setStartPoint] = useState({ x: 0, y: 0 });
 
     const nodeCounterRef = useRef(1);
     const dragStartPointRef = useRef<{ x: number; y: number; target: HTMLElement | null } | null>(null);
@@ -224,12 +230,23 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
 
     const handleMouseDownOnDivider = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
-        setIsDragging(true);
+        setIsResizing(true);
+    }, []);
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key.toLowerCase() === 'v' && e.target && !['TEXTAREA', 'INPUT', 'SELECT'].includes((e.target as HTMLElement).nodeName)) {
+                e.preventDefault();
+                setIsPanMode(prev => !prev);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
-            if (isDragging && containerRef.current) {
+            if (isResizing && containerRef.current) {
                 const containerRect = containerRef.current.getBoundingClientRect();
                 const newSidebarWidth = containerRect.right - e.clientX;
                 const newSize = (newSidebarWidth / containerRect.width) * 100;
@@ -238,10 +255,10 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
         };
 
         const handleMouseUp = () => {
-            setIsDragging(false);
+            setIsResizing(false);
         };
 
-        if (isDragging) {
+        if (isResizing) {
             document.body.style.userSelect = 'none';
             document.body.style.cursor = 'col-resize';
             window.addEventListener('mousemove', handleMouseMove);
@@ -256,7 +273,7 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
             document.body.style.userSelect = '';
             document.body.style.cursor = '';
         };
-    }, [isDragging]);
+    }, [isResizing]);
 
     useEffect(() => {
         const renderMermaid = async () => {
@@ -334,6 +351,14 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
     }, [linkingTargetId, svgContent]);
 
     const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (isPanMode) {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            setIsPanning(true);
+            setStartPoint({ x: e.clientX - transform.x, y: e.clientY - transform.y });
+            return;
+        }
+
         dragStartPointRef.current = { x: e.clientX, y: e.clientY, target: e.target as HTMLElement };
 
         const parentGroup = (e.target as HTMLElement).closest('g.subgraph, g.cluster, g.node');
@@ -355,6 +380,15 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
     };
 
     const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (isPanMode) {
+            if (!isPanning) return;
+            e.preventDefault();
+            const newX = e.clientX - startPoint.x;
+            const newY = e.clientY - startPoint.y;
+            setTransform(t => ({...t, x: newX, y: newY}));
+            return;
+        }
+
         if (!linkingState.startNodeId) return;
 
         const containerRect = e.currentTarget.getBoundingClientRect();
@@ -371,8 +405,13 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
             setLinkingTargetId(null);
         }
     };
-
+    
     const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (isPanMode) {
+            setIsPanning(false);
+            return;
+        }
+        
         if (!dragStartPointRef.current) return;
 
         const dragDistance = Math.sqrt(
@@ -416,6 +455,38 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
         setLinkingTargetId(null);
     };
     
+    const handleMouseLeave = () => {
+        if (isPanMode) {
+            setIsPanning(false);
+        }
+        if (linkingState.startNodeId) {
+            setLinkingState({ startNodeId: null, startPoint: null, endPoint: null });
+            setLinkingTargetId(null);
+        }
+    };
+    
+    const handleWheel = (e: React.WheelEvent) => {
+        e.preventDefault();
+        if (!svgContainerRef.current) return;
+
+        const rect = svgContainerRef.current.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        
+        const scaleAmount = -e.deltaY * 0.001 * transform.scale;
+        const newScale = Math.max(0.1, Math.min(5, transform.scale + scaleAmount));
+        const scaleRatio = newScale / transform.scale;
+
+        const newX = mouseX - scaleRatio * (mouseX - transform.x);
+        const newY = mouseY - scaleRatio * (mouseY - transform.y);
+
+        setTransform({ scale: newScale, x: newX, y: newY });
+    };
+
+    const zoomIn = () => setTransform(t => ({ ...t, scale: Math.min(t.scale + 0.2, 5) }));
+    const zoomOut = () => setTransform(t => ({ ...t, scale: Math.max(t.scale - 0.2, 0.1) }));
+    const resetTransform = () => setTransform({ scale: 1, x: 0, y: 0 });
+
     const handleAddShape = (shape: Shape) => {
         const newNodeId = `node${nodeCounterRef.current}`;
         nodeCounterRef.current++;
@@ -452,6 +523,13 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
                  <div className="flex-shrink-0 bg-gray-700 p-2 px-4 flex justify-between items-center rounded-t-lg">
                     <h3 className="text-sm font-semibold text-gray-300">Canvas</h3>
                     <div className="flex items-center gap-2">
+                        <Button
+                            onClick={() => setIsPanMode(!isPanMode)}
+                            className={isPanMode ? '!bg-indigo-500' : ''}
+                            title="Toggle Pan Mode (V)"
+                        >
+                            <Icon name="hand" className="w-4 h-4 mr-1"/> Pan
+                        </Button>
                         <Button onClick={() => setIsShapesPaletteOpen(true)}>
                             <Icon name="shapes" className="w-4 h-4 mr-1"/> Shapes
                         </Button>
@@ -482,8 +560,8 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
                         stroke-width: 3px !important;
                     }
                     .visual-canvas svg {
-                        max-width: 100%;
-                        max-height: 100%;
+                        max-width: none;
+                        max-height: none;
                         height: auto;
                         overflow: visible;
                     }
@@ -499,23 +577,39 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
                     onMouseDown={handleMouseDown}
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
+                    onMouseLeave={handleMouseLeave}
+                    onWheel={handleWheel}
                     className="w-full h-full p-4 visual-canvas flex-grow relative grid place-items-center overflow-hidden"
+                    style={{ cursor: isPanMode ? (isPanning ? 'grabbing' : 'grab') : 'default' }}
                 >
-                    {error && (
-                        <div className="text-red-400 bg-red-900/50 rounded-md font-mono text-sm max-w-lg relative z-0 text-center">
-                            {error}
-                        </div>
-                    )}
-                    {!error && svgContent && (
-                        <div className="max-w-full max-h-full relative z-0" dangerouslySetInnerHTML={{ __html: svgContent }} />
-                    )}
-                    {!error && !svgContent && (
-                        <div className="text-center text-gray-500 relative z-0">
-                            <Icon name="visual" className="w-16 h-16 mx-auto mb-4 text-gray-600" />
-                            <p>Diagram preview will appear here.</p>
-                            <p className="text-sm">Start by writing or loading a diagram in the Editor.</p>
-                        </div>
-                    )}
+                    <div
+                        style={{
+                            transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
+                            transition: isPanning ? 'none' : 'transform 0.1s ease-out',
+                        }}
+                    >
+                        {error && (
+                            <div className="text-red-400 bg-red-900/50 rounded-md font-mono text-sm max-w-lg relative z-0 text-center">
+                                {error}
+                            </div>
+                        )}
+                        {!error && svgContent && (
+                            <div className="relative z-0" dangerouslySetInnerHTML={{ __html: svgContent }} />
+                        )}
+                        {!error && !svgContent && (
+                            <div className="text-center text-gray-500 relative z-0">
+                                <Icon name="visual" className="w-16 h-16 mx-auto mb-4 text-gray-600" />
+                                <p>Diagram preview will appear here.</p>
+                                <p className="text-sm">Start by writing or loading a diagram in the Editor.</p>
+                            </div>
+                        )}
+                    </div>
+                    
+                    <div className="absolute bottom-4 right-4 z-10 flex items-center gap-1 bg-gray-900/50 p-1 rounded-lg">
+                        <Button onClick={zoomIn} className="!p-2" title="Zoom In"><Icon name="zoom-in" className="w-4 h-4" /></Button>
+                        <Button onClick={zoomOut} className="!p-2" title="Zoom Out"><Icon name="zoom-out" className="w-4 h-4" /></Button>
+                        <Button onClick={resetTransform} className="!p-2" title="Reset View"><Icon name="refresh-cw" className="w-4 h-4" /></Button>
+                    </div>
 
                     {linkingState.startNodeId && linkingState.startPoint && linkingState.endPoint && (
                         <svg overflow="visible" className="absolute top-0 left-0 w-full h-full pointer-events-none z-10">
