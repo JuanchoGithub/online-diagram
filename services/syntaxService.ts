@@ -110,7 +110,7 @@ class SyntaxService {
         };
     }
 
-    private getDiagramType(code: string): { keyword: string; type: string } | null {
+    getDiagramType(code: string): { keyword: string; type: string } | null {
         const firstLine = code.trim().split('\n')[0].trim();
         if (!firstLine) return null;
 

@@ -1,131 +1,260 @@
-
-import React, { useState, useEffect, useCallback } from 'react';
-import type { View, ThemeName } from '../../types';
-import { DiagramPreview } from '../DiagramPreview';
-import { Button } from '../Button';
+import React, { useState, useEffect, useRef } from 'react';
+import type { ThemeName } from '../../types';
 import { Icon } from '../Icon';
 
-interface Node {
-    id: string;
-    text: string;
-    shape: 'rect' | 'round' | 'stadium' | 'diamond' | 'circle';
-}
-
-interface Edge {
-    id: string;
-    from: string;
-    to: string;
-    text: string;
-}
-
-const SHAPE_SYNTAX: Record<Node['shape'], [string, string]> = {
-    rect: ['[', ']'],
-    round: ['(', ')'],
-    stadium: ['([', '])'],
-    diamond: ['{', '}'],
-    circle: ['((', '))'],
-};
-
 interface VisualBuilderViewProps {
-    onGenerateCode: (code: string, targetView: View) => void;
+    code: string;
+    onCodeChange: (newCode: string) => void;
     theme: ThemeName;
     showToast: (message: string, type?: 'success' | 'info' | 'error') => void;
 }
 
-export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ onGenerateCode, theme, showToast }) => {
-    const [nodes, setNodes] = useState<Node[]>([]);
-    const [edges, setEdges] = useState<Edge[]>([]);
-    const [generatedCode, setGeneratedCode] = useState('graph TD\n');
+interface DiagramObject {
+    id: string;
+    label: string;
+}
 
-    const [newNode, setNewNode] = useState({ id: 'node' + (nodes.length + 1), text: '', shape: 'rect' as Node['shape'] });
-    const [newEdge, setNewEdge] = useState({ from: '', to: '', text: '' });
+interface ParsedDiagramObjects {
+    nodes: DiagramObject[];
+    edges: DiagramObject[];
+    subgraphs: DiagramObject[];
+    others: DiagramObject[];
+}
 
-    useEffect(() => {
-        let code = 'graph TD\n';
-        nodes.forEach(node => {
-            const [start, end] = SHAPE_SYNTAX[node.shape];
-            code += `    ${node.id}${start}"${node.text}"${end}\n`;
-        });
-        edges.forEach(edge => {
-            code += `    ${edge.from} -->|"${edge.text}"| ${edge.to}\n`;
-        });
-        setGeneratedCode(code);
-    }, [nodes, edges]);
+const parseSvgForObjects = (svgContainer: HTMLDivElement | null): ParsedDiagramObjects => {
+    if (!svgContainer) return { nodes: [], edges: [], subgraphs: [], others: [] };
 
-    const addNode = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (newNode.id && newNode.text && !nodes.find(n => n.id === newNode.id)) {
-            setNodes([...nodes, newNode]);
-            setNewNode({ id: 'node' + (nodes.length + 2), text: '', shape: 'rect' });
-        }
+    const nodes: DiagramObject[] = [];
+    const edges: DiagramObject[] = [];
+    const subgraphs: DiagramObject[] = [];
+    const others: DiagramObject[] = [];
+    const processedIds = new Set<string>();
+
+    const getGenericLabel = (element: Element, defaultId: string): string => {
+        // Find label text, preferring specific label containers but falling back to any text
+        const textEl = element.querySelector('.label text, .label div, :scope > text, :scope > div');
+        return textEl?.textContent?.trim() || defaultId;
     };
 
-    const addEdge = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (newEdge.from && newEdge.to) {
-            setEdges([...edges, { ...newEdge, id: `edge-${Date.now()}` }]);
-            setNewEdge({ from: '', to: '', text: '' });
+    // Iterate over all elements with an ID
+    svgContainer.querySelectorAll('[id]').forEach(el => {
+        const element = el as HTMLElement;
+        const id = element.id;
+        if (!id || processedIds.has(id)) return;
+
+        let categorized = false;
+
+        // Only categorize certain types for groups
+        if (element.tagName.toLowerCase() === 'g') {
+            // The order of these checks is important to prevent mis-categorization.
+            if (element.matches('.subgraph, .cluster')) {
+                subgraphs.push({ id, label: getGenericLabel(element, id) });
+                categorized = true;
+            } else if (element.classList.contains('edgePath')) {
+                const labelId = `${id}-label`;
+                const labelGroup = svgContainer.querySelector(`g[id="${CSS.escape(labelId)}"]`);
+                const labelText = labelGroup?.textContent?.trim();
+                const label = labelText || id; // Default to the link ID if no text label exists
+                edges.push({ id, label });
+                categorized = true;
+            } else if (element.matches('.node')) {
+                nodes.push({ id, label: getGenericLabel(element, id) });
+                categorized = true;
+            } else if (element.matches('.actor, .participant, .class')) {
+                others.push({ id, label: getGenericLabel(element, id) });
+                categorized = true;
+            }
+        }
+
+        // Fallback for edges based on ID pattern
+        if (!categorized && id.startsWith('L-')) {
+            const labelId = `${id}-label`;
+            const labelGroup = svgContainer.querySelector(`g[id="${CSS.escape(labelId)}"]`);
+            const labelText = labelGroup?.textContent?.trim();
+            const label = labelText || id;
+            edges.push({ id, label });
+            categorized = true;
+        }
+        
+        if (!categorized) {
+            others.push({ id, label: getGenericLabel(element, id) });
+        }
+        processedIds.add(id);
+    });
+
+    return { nodes, edges, subgraphs, others };
+};
+
+
+const CollapsibleObjectList: React.FC<{
+    title: string;
+    objects: DiagramObject[];
+    icon: string;
+    selectedId: string | null;
+    onSelect: (id: string) => void;
+}> = ({ title, objects, icon, selectedId, onSelect }) => {
+    const [isOpen, setIsOpen] = useState(true);
+
+    return (
+        <div>
+            <button
+                className="w-full flex justify-between items-center text-sm font-semibold text-gray-400 mb-2 mt-4 px-2 hover:text-white transition-colors"
+                onClick={() => setIsOpen(!isOpen)}
+                aria-expanded={isOpen}
+            >
+                <div className="flex items-center gap-2">
+                    <Icon name={isOpen ? 'chevron-down' : 'chevron-right'} className="w-4 h-4" />
+                    <span>{title} ({objects.length})</span>
+                </div>
+            </button>
+            {isOpen && (
+                <ul className="space-y-1">
+                    {objects.length > 0 ? (
+                        objects.map(obj => (
+                            <li key={obj.id}>
+                                <button
+                                    onClick={() => onSelect(obj.id)}
+                                    className={`w-full text-left px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-3 ${
+                                        selectedId === obj.id
+                                            ? 'bg-indigo-500 text-white'
+                                            : 'hover:bg-gray-700 text-gray-300'
+                                    }`}
+                                    title={obj.label}
+                                >
+                                    <Icon name={icon} className="w-4 h-4 flex-shrink-0" />
+                                    <span className="truncate">{obj.label}</span>
+                                </button>
+                            </li>
+                        ))
+                    ) : (
+                         <li>
+                            <p className="px-3 py-1.5 text-sm text-gray-500 italic">None</p>
+                        </li>
+                    )}
+                </ul>
+            )}
+        </div>
+    );
+};
+
+
+export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCodeChange, theme, showToast }) => {
+    const [svgContent, setSvgContent] = useState('');
+    const [error, setError] = useState<string | null>(null);
+    const [diagramObjects, setDiagramObjects] = useState<ParsedDiagramObjects>({ nodes: [], edges: [], subgraphs: [], others: [] });
+    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const svgContainerRef = useRef<HTMLDivElement>(null);
+    const mermaidId = 'visual-builder-preview';
+
+    useEffect(() => {
+        const renderMermaid = async () => {
+            if (!code.trim()) {
+                setSvgContent('');
+                setError(null);
+                setDiagramObjects({ nodes: [], edges: [], subgraphs: [], others: [] });
+                return;
+            }
+            try {
+                setSelectedId(null);
+                setError(null);
+                const { svg } = await (window as any).mermaid.render(mermaidId, code);
+                setSvgContent(svg);
+            } catch (e: any) {
+                const errorMessage = e.message || 'Invalid Mermaid syntax.';
+                setError(errorMessage);
+                showToast(errorMessage, 'error');
+                setSvgContent('');
+                setDiagramObjects({ nodes: [], edges: [], subgraphs: [], others: [] });
+            }
+        };
+        const timeoutId = setTimeout(renderMermaid, 300);
+        return () => clearTimeout(timeoutId);
+    }, [code, theme, showToast]);
+    
+    useEffect(() => {
+        if (svgContent && svgContainerRef.current) {
+            // Use a small timeout to ensure the DOM has been updated by dangerouslySetInnerHTML
+            const timer = setTimeout(() => {
+                if (svgContainerRef.current) {
+                    const objects = parseSvgForObjects(svgContainerRef.current);
+                    setDiagramObjects(objects);
+                }
+            }, 100);
+            return () => clearTimeout(timer);
+        }
+    }, [svgContent]);
+
+    useEffect(() => {
+        if (!svgContainerRef.current) return;
+        
+        const previouslySelected = svgContainerRef.current.querySelector('.selected-object');
+        previouslySelected?.classList.remove('selected-object');
+        
+        if (selectedId) {
+            const elementToSelect = svgContainerRef.current.querySelector(`#${CSS.escape(selectedId)}`);
+            elementToSelect?.classList.add('selected-object');
+
+            // Also select edge labels if the edge is selected
+            if (selectedId.startsWith('L-')) {
+                 const labelId = `${selectedId}-label`;
+                 const labelElement = svgContainerRef.current.querySelector(`g[id="${CSS.escape(labelId)}"]`);
+                 labelElement?.classList.add('selected-object');
+            }
+        }
+    }, [selectedId, svgContent]);
+
+    const handleSvgClick = (e: React.MouseEvent) => {
+        let target = e.target as HTMLElement;
+        const parentGroup = target.closest('g.subgraph, g.cluster, g.node, g.edge, g.actor, g.participant, g.class, g[id^="L-"]');
+
+        if (parentGroup && parentGroup.id) {
+            setSelectedId(parentGroup.id);
+        } else {
+            setSelectedId(null);
         }
     };
     
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-1 flex flex-col gap-6">
-                <div className="bg-gray-800 p-4 rounded-lg shadow-lg">
-                    <h3 className="font-semibold mb-3 text-indigo-400">Add Node</h3>
-                    <form onSubmit={addNode} className="space-y-3">
-                        <input type="text" placeholder="Node ID" value={newNode.id} onChange={e => setNewNode({...newNode, id: e.target.value})} className="w-full bg-gray-700 p-2 rounded" required />
-                        <input type="text" placeholder="Node Text" value={newNode.text} onChange={e => setNewNode({...newNode, text: e.target.value})} className="w-full bg-gray-700 p-2 rounded" required />
-                        <select value={newNode.shape} onChange={e => setNewNode({...newNode, shape: e.target.value as Node['shape']})} className="w-full bg-gray-700 p-2 rounded">
-                            <option value="rect">Rectangle</option>
-                            <option value="round">Round</option>
-                            <option value="stadium">Stadium</option>
-                            <option value="diamond">Diamond</option>
-                            <option value="circle">Circle</option>
-                        </select>
-                        <Button type="submit" className="w-full"><Icon name="add" className="w-4 h-4 mr-2" />Add Node</Button>
-                    </form>
-                </div>
-
-                <div className="bg-gray-800 p-4 rounded-lg shadow-lg">
-                    <h3 className="font-semibold mb-3 text-indigo-400">Add Edge</h3>
-                    <form onSubmit={addEdge} className="space-y-3">
-                        <select value={newEdge.from} onChange={e => setNewEdge({...newEdge, from: e.target.value})} className="w-full bg-gray-700 p-2 rounded" required disabled={nodes.length < 2}>
-                            <option value="">From Node</option>
-                            {nodes.map(n => <option key={n.id} value={n.id}>{n.text} ({n.id})</option>)}
-                        </select>
-                         <select value={newEdge.to} onChange={e => setNewEdge({...newEdge, to: e.target.value})} className="w-full bg-gray-700 p-2 rounded" required disabled={nodes.length < 2}>
-                            <option value="">To Node</option>
-                            {nodes.map(n => <option key={n.id} value={n.id}>{n.text} ({n.id})</option>)}
-                        </select>
-                        <input type="text" placeholder="Edge Label (optional)" value={newEdge.text} onChange={e => setNewEdge({...newEdge, text: e.target.value})} className="w-full bg-gray-700 p-2 rounded" />
-                        <Button type="submit" className="w-full" disabled={nodes.length < 2}><Icon name="add" className="w-4 h-4 mr-2" />Add Edge</Button>
-                    </form>
-                </div>
-            </div>
-            <div className="lg:col-span-2 flex flex-col gap-6">
-                <div className="bg-gray-800 p-4 rounded-lg shadow-lg">
-                    <div className="flex justify-between items-center mb-3">
-                         <h3 className="font-semibold text-indigo-400">Diagram Elements</h3>
-                         <Button onClick={() => onGenerateCode(generatedCode, 'editor')} disabled={!nodes.length}>
-                            <Icon name="editor" className="w-4 h-4 mr-2"/>Open in Editor
-                         </Button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 max-h-48 overflow-y-auto">
-                        <div>
-                            <h4 className="text-sm font-bold mb-2">Nodes</h4>
-                            <ul className="space-y-1 text-sm">{nodes.map(n => <li key={n.id} className="bg-gray-700 p-1 px-2 rounded">{n.text}</li>)}</ul>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 h-[calc(100vh-8rem)]">
+            <main className="md:col-span-3 bg-gray-800 rounded-lg shadow-lg flex items-center justify-center relative overflow-hidden">
+                <style>{`
+                    .selected-object {
+                        outline: 3px solid #6366F1; /* Indigo-500 */
+                        outline-offset: 4px;
+                        border-radius: 4px;
+                    }
+                    .visual-canvas svg {
+                        max-width: 100%;
+                        max-height: 100%;
+                        height: auto;
+                    }
+                    .visual-canvas .subgraph, .visual-canvas .cluster, .visual-canvas .node, .edge, .actor, .participant, .class, g[id^="L-"] {
+                        cursor: pointer;
+                    }
+                `}</style>
+                <div 
+                    ref={svgContainerRef}
+                    onClick={handleSvgClick}
+                    className="w-full h-full p-4 flex items-center justify-center visual-canvas"
+                >
+                    {error && <div className="text-red-400 bg-red-900/50 p-4 rounded-md font-mono text-sm max-w-lg">{error}</div>}
+                    {!error && svgContent && <div className="w-full h-full" dangerouslySetInnerHTML={{ __html: svgContent }} />}
+                    {!error && !svgContent && (
+                        <div className="text-center text-gray-500">
+                            <Icon name="visual" className="w-16 h-16 mx-auto mb-4 text-gray-600" />
+                            <p>Diagram preview will appear here.</p>
+                            <p className="text-sm">Start by writing or loading a diagram in the Editor.</p>
                         </div>
-                        <div>
-                            <h4 className="text-sm font-bold mb-2">Edges</h4>
-                            <ul className="space-y-1 text-sm">{edges.map(e => <li key={e.id} className="bg-gray-700 p-1 px-2 rounded">{e.from} -> {e.to}</li>)}</ul>
-                        </div>
-                    </div>
+                    )}
                 </div>
-                <div className="h-[calc(100vh-28rem)]">
-                    <DiagramPreview code={generatedCode} showToast={showToast} theme={theme} />
-                </div>
-            </div>
+            </main>
+             <aside className="md:col-span-1 bg-gray-800 rounded-lg p-4 overflow-y-auto">
+                <h3 className="text-base font-semibold text-white mb-4">Diagram Objects</h3>
+                <CollapsibleObjectList title="Subgraphs" objects={diagramObjects.subgraphs} icon="folder" selectedId={selectedId} onSelect={setSelectedId} />
+                <CollapsibleObjectList title="Nodes" objects={diagramObjects.nodes} icon="square" selectedId={selectedId} onSelect={setSelectedId} />
+                <CollapsibleObjectList title="Links" objects={diagramObjects.edges} icon="link" selectedId={selectedId} onSelect={setSelectedId} />
+                <CollapsibleObjectList title="Others" objects={diagramObjects.others} icon="git-commit" selectedId={selectedId} onSelect={setSelectedId} />
+            </aside>
         </div>
     );
 };

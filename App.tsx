@@ -209,7 +209,12 @@ const App: React.FC = () => {
                     theme={theme}
                 />;
             case 'visual-builder':
-                return <VisualBuilderView onGenerateCode={handleCodeFromOtherView} theme={theme} showToast={showToast} />;
+                return <VisualBuilderView 
+                    code={code}
+                    onCodeChange={handleEditorCodeChange}
+                    theme={theme}
+                    showToast={showToast}
+                />;
             case 'editor':
             default:
                 return (
