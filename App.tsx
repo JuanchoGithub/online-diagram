@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/Header';
 import { EditorView } from './components/views/EditorView';
@@ -223,6 +224,7 @@ const App: React.FC = () => {
                         setCode={handleEditorCodeChange}
                         onLoadTemplate={handleLoadTemplate}
                         showToast={showToast}
+                        // FIX: Pass `handleUndo` to the `onUndo` prop.
                         onUndo={handleUndo}
                         canUndo={history.length > 0}
                         theme={theme}
@@ -231,6 +233,10 @@ const App: React.FC = () => {
                 );
         }
     };
+    
+    const mainContainerClasses = view === 'visual-builder'
+        ? "flex-grow px-4 py-6 mb-10" // Full width for visual builder
+        : "flex-grow container mx-auto px-4 py-6 mb-10"; // Centered for other views
 
     return (
         <div className="min-h-screen flex flex-col bg-gray-900 font-sans">
@@ -241,7 +247,7 @@ const App: React.FC = () => {
                 onThemeChange={handleThemeChange}
                 onToggleLibrary={() => setIsLibraryModalOpen(true)}
             />
-            <main className="flex-grow container mx-auto px-4 py-6 mb-10">
+            <main className={mainContainerClasses}>
                 {renderView()}
             </main>
             <DiagramLibrary
