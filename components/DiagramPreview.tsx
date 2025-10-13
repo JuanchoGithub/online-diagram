@@ -48,19 +48,11 @@ export const DiagramPreview: React.FC<DiagramPreviewProps> = ({ code, showToast,
     const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
     const [isPanning, setIsPanning] = useState(false);
     const [startPoint, setStartPoint] = useState({ x: 0, y: 0 });
-    const [isMounted, setIsMounted] = useState(false);
     
     const previewRef = useRef<HTMLDivElement>(null);
     const mermaidId = 'mermaid-preview';
 
     useEffect(() => {
-        const timer = setTimeout(() => setIsMounted(true), 1);
-        return () => clearTimeout(timer);
-    }, []);
-
-    useEffect(() => {
-        if (!isMounted) return;
-
         const renderMermaid = async () => {
             if (!code.trim()) {
                 setSvg('');
@@ -82,7 +74,7 @@ export const DiagramPreview: React.FC<DiagramPreviewProps> = ({ code, showToast,
         };
         const timeoutId = setTimeout(renderMermaid, 300);
         return () => clearTimeout(timeoutId);
-    }, [code, theme, showToast, isMounted]);
+    }, [code, theme, showToast]);
     
     const downloadFile = (blob: Blob, filename: string) => {
         const url = URL.createObjectURL(blob);

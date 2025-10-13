@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { ThemeName } from '../../types';
 import { Icon } from '../Icon';
 import { Button } from '../Button';
@@ -149,8 +148,9 @@ const CollapsibleObjectList: React.FC<{
     onSelect: (id: string) => void;
     showId?: boolean;
     idFormatter?: (id: string) => string;
-}> = ({ title, objects, icon, selectedId, onSelect, showId = false, idFormatter = (id) => id }) => {
-    const [isOpen, setIsOpen] = useState(true);
+    defaultOpen?: boolean;
+}> = ({ title, objects, icon, selectedId, onSelect, showId = false, idFormatter = (id) => id, defaultOpen = true }) => {
+    const [isOpen, setIsOpen] = useState(defaultOpen);
 
     return (
         <div>
@@ -213,11 +213,50 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
         startPoint: { x: number; y: number } | null;
         endPoint: { x: number; y: number } | null;
     }>({ startNodeId: null, startPoint: null, endPoint: null });
+    const [sidebarSize, setSidebarSize] = useState(25); // In percentage
+    const [isDragging, setIsDragging] = useState(false);
+
     const nodeCounterRef = useRef(1);
     const dragStartPointRef = useRef<{ x: number; y: number; target: HTMLElement | null } | null>(null);
-    
     const svgContainerRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
     const mermaidId = 'visual-builder-preview';
+
+    const handleMouseDownOnDivider = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        setIsDragging(true);
+    }, []);
+
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (isDragging && containerRef.current) {
+                const containerRect = containerRef.current.getBoundingClientRect();
+                const newSidebarWidth = containerRect.right - e.clientX;
+                const newSize = (newSidebarWidth / containerRect.width) * 100;
+                setSidebarSize(Math.max(15, Math.min(50, newSize))); // Constrain sidebar size
+            }
+        };
+
+        const handleMouseUp = () => {
+            setIsDragging(false);
+        };
+
+        if (isDragging) {
+            document.body.style.userSelect = 'none';
+            document.body.style.cursor = 'col-resize';
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+            window.addEventListener('mouseleave', handleMouseUp);
+        }
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+            window.removeEventListener('mouseleave', handleMouseUp);
+            document.body.style.userSelect = '';
+            document.body.style.cursor = '';
+        };
+    }, [isDragging]);
 
     useEffect(() => {
         const renderMermaid = async () => {
@@ -405,8 +444,11 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
     };
     
     return (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 h-[calc(100vh-8rem)]">
-            <main className="md:col-span-3 bg-gray-800 rounded-lg shadow-lg flex flex-col relative overflow-hidden">
+        <div ref={containerRef} className="flex h-[calc(100vh-6.5rem)]">
+            <main 
+                className="bg-gray-800 rounded-lg shadow-lg flex flex-col relative overflow-hidden"
+                style={{ width: `calc(100% - ${sidebarSize}% - 8px)` }}
+            >
                  <div className="flex-shrink-0 bg-gray-700 p-2 px-4 flex justify-between items-center rounded-t-lg">
                     <h3 className="text-sm font-semibold text-gray-300">Canvas</h3>
                     <div className="flex items-center gap-2">
@@ -492,12 +534,21 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
                     )}
                 </div>
             </main>
-             <aside className="md:col-span-1 bg-gray-800 rounded-lg p-4 overflow-y-auto">
+            
+            <div
+                onMouseDown={handleMouseDownOnDivider}
+                className="h-full w-2 flex-shrink-0 cursor-col-resize bg-gray-700 hover:bg-indigo-500 transition-colors"
+            />
+             
+            <aside 
+                className="bg-gray-800 rounded-lg p-4 overflow-y-auto"
+                style={{ width: `${sidebarSize}%` }}
+            >
                 <h3 className="text-base font-semibold text-white mb-4">Diagram Objects</h3>
                 <CollapsibleObjectList title="Subgraphs" objects={diagramObjects.subgraphs} icon="folder" selectedId={selectedId} onSelect={setSelectedId} showId={true} />
                 <CollapsibleObjectList title="Nodes" objects={diagramObjects.nodes} icon="square" selectedId={selectedId} onSelect={setSelectedId} showId={true} idFormatter={formatNodeId} />
                 <CollapsibleObjectList title="Links" objects={diagramObjects.edges} icon="link" selectedId={selectedId} onSelect={setSelectedId} showId={true} idFormatter={formatEdgeId} />
-                <CollapsibleObjectList title="Others" objects={diagramObjects.others} icon="git-commit" selectedId={selectedId} onSelect={setSelectedId} />
+                <CollapsibleObjectList title="Others" objects={diagramObjects.others} icon="git-commit" selectedId={selectedId} onSelect={setSelectedId} defaultOpen={false} />
             </aside>
         </div>
     );
