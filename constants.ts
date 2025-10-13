@@ -12,7 +12,7 @@ export const DEFAULT_DIAGRAM_CODE = `graph TD
     end
     E --> F((End));
     
-    linkStyle 0 stroke:#ff3,stroke-width:4px,color:red;
+    linkStyle 0 stroke:#ff3,stroke-width:4px;
     classDef special fill:#f9f,stroke:#333,stroke-width:2px;
     class B special;
 `;
@@ -83,7 +83,7 @@ export const CHART_EXAMPLES = [
     end
     E --> F((End));
     
-    linkStyle 0 stroke:#ff3,stroke-width:4px,color:red;
+    linkStyle 0 stroke:#ff3,stroke-width:4px;
     classDef special fill:#f9f,stroke:#333,stroke-width:2px;
     class B special;`
     },

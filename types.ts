@@ -27,10 +27,18 @@ export interface SyntaxExplanation {
     example?: string;
 }
 
+// New interface for detailed keywords within a larger syntax construct
+export interface SyntaxDetail {
+    keywords: string[];
+    explanation: SyntaxExplanation;
+    values?: SyntaxDetail[]; // Can be nested for property -> values
+}
+
 export interface SyntaxDefinition {
     matcher: RegExp;
-    explanation: SyntaxExplanation;
+    explanation: SyntaxExplanation; // General explanation for the whole line/construct
     category?: string;
+    details?: SyntaxDetail[]; // Granular explanations for parts of the construct
 }
 
 export interface DiagramSyntax {

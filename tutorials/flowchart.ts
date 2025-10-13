@@ -17,30 +17,105 @@ export const flowchartTutorial: TutorialContent = {
       ],
     },
     {
-      title: 'Node Shapes (Standard)',
+      title: 'Node Shapes',
       id: 'Nodes',
       steps: [
         {
-          title: 'Basic Shapes',
-          description: 'Mermaid offers a variety of syntaxes for common node shapes.',
+          title: 'Comprehensive Node Shapes',
+          description: `Mermaid provides a rich set of node shapes to create expressive flowcharts. The table below details the syntax for each available shape.<br/><br/>
+            <div class="overflow-x-auto bg-gray-900/50 rounded-lg border border-gray-700">
+              <table class="w-full text-sm text-left text-gray-300">
+                <thead class="text-xs text-gray-200 uppercase bg-gray-700">
+                  <tr><th class="px-4 py-2">Shape Name</th><th class="px-4 py-2">Syntax</th><th class="px-4 py-2">Example Code</th></tr>
+                </thead>
+                <tbody>
+                  <tr class="border-b border-gray-700 hover:bg-gray-700/50">
+                    <td class="px-4 py-2">Rectangle</td>
+                    <td class="px-4 py-2 font-mono"><code>id[Text]</code></td>
+                    <td class="px-4 py-2 font-mono"><code>A[Rectangle]</code></td>
+                  </tr>
+                  <tr class="border-b border-gray-700 hover:bg-gray-700/50">
+                    <td class="px-4 py-2">Rounded Rectangle</td>
+                    <td class="px-4 py-2 font-mono"><code>id(Text)</code></td>
+                    <td class="px-4 py-2 font-mono"><code>B(Rounded)</code></td>
+                  </tr>
+                  <tr class="border-b border-gray-700 hover:bg-gray-700/50">
+                    <td class="px-4 py-2">Stadium</td>
+                    <td class="px-4 py-2 font-mono"><code>id([Text])</code></td>
+                    <td class="px-4 py-2 font-mono"><code>C([Stadium])</code></td>
+                  </tr>
+                  <tr class="border-b border-gray-700 hover:bg-gray-700/50">
+                    <td class="px-4 py-2">Subroutine</td>
+                    <td class="px-4 py-2 font-mono"><code>id[[Text]]</code></td>
+                    <td class="px-4 py-2 font-mono"><code>D[[Subroutine]]</code></td>
+                  </tr>
+                  <tr class="border-b border-gray-700 hover:bg-gray-700/50">
+                    <td class="px-4 py-2">Cylinder</td>
+                    <td class="px-4 py-2 font-mono"><code>id[(Text)]</code></td>
+                    <td class="px-4 py-2 font-mono"><code>E[(Cylinder)]</code></td>
+                  </tr>
+                  <tr class="border-b border-gray-700 hover:bg-gray-700/50">
+                    <td class="px-4 py-2">Circle</td>
+                    <td class="px-4 py-2 font-mono"><code>id((Text))</code></td>
+                    <td class="px-4 py-2 font-mono"><code>F((Circle))</code></td>
+                  </tr>
+                  <tr class="border-b border-gray-700 hover:bg-gray-700/50">
+                    <td class="px-4 py-2">Double Circle</td>
+                    <td class="px-4 py-2 font-mono"><code>id(((Text)))</code></td>
+                    <td class="px-4 py-2 font-mono"><code>G(((Double Circle)))</code></td>
+                  </tr>
+                  <tr class="border-b border-gray-700 hover:bg-gray-700/50">
+                    <td class="px-4 py-2">Rhombus / Decision</td>
+                    <td class="px-4 py-2 font-mono"><code>id{Text}</code></td>
+                    <td class="px-4 py-2 font-mono"><code>H{Rhombus}</code></td>
+                  </tr>
+                  <tr class="border-b border-gray-700 hover:bg-gray-700/50">
+                    <td class="px-4 py-2">Hexagon</td>
+                    <td class="px-4 py-2 font-mono"><code>id{{Text}}</code></td>
+                    <td class="px-4 py-2 font-mono"><code>I{{Hexagon}}</code></td>
+                  </tr>
+                  <tr class="border-b border-gray-700 hover:bg-gray-700/50">
+                    <td class="px-4 py-2">Asymmetric</td>
+                    <td class="px-4 py-2 font-mono"><code>id>Text]</code></td>
+                    <td class="px-4 py-2 font-mono"><code>J>Asymmetric]</code></td>
+                  </tr>
+                  <tr class="border-b border-gray-700 hover:bg-gray-700/50">
+                    <td class="px-4 py-2">Parallelogram</td>
+                    <td class="px-4 py-2 font-mono"><code>id[/Text/]</code></td>
+                    <td class="px-4 py-2 font-mono"><code>K[/Parallelogram/]</code></td>
+                  </tr>
+                  <tr class="border-b border-gray-700 hover:bg-gray-700/50">
+                    <td class="px-4 py-2">Parallelogram (Alt)</td>
+                    <td class="px-4 py-2 font-mono"><code>id[\\Text\\]</code></td>
+                    <td class="px-4 py-2 font-mono"><code>L[\\\\Parallelogram Alt\\\\]</code></td>
+                  </tr>
+                  <tr class="border-b border-gray-700 hover:bg-gray-700/50">
+                    <td class="px-4 py-2">Trapezoid</td>
+                    <td class="px-4 py-2 font-mono"><code>id[/Text\\]</code></td>
+                    <td class="px-4 py-2 font-mono"><code>M[/Trapezoid\\\\]</code></td>
+                  </tr>
+                  <tr class="hover:bg-gray-700/50">
+                    <td class="px-4 py-2">Trapezoid (Alt)</td>
+                    <td class="px-4 py-2 font-mono"><code>id[\\Text/]</code></td>
+                    <td class="px-4 py-2 font-mono"><code>N[\\\\Trapezoid Alt/]</code></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>`,
           code: `flowchart TD
-    A[Rectangle]
-    B(Rounded Edges)
-    C([Stadium])
-    D((Circle))
-    E{Rhombus/Decision}`,
-        },
-        {
-          title: 'Specialized & Angled Shapes',
-          description: 'More complex shapes are available for specific use cases like databases, subroutines, or angled diagrams.',
-          code: `flowchart TD
-    F>Asymmetric]
-    G[[Subroutine]]
-    H[(Database)]
-    I{{Hexagon}}
-    J(((Double Circle)))
-    K[/Parallelogram/]
-    L[\\Trapezoid Alt/]`,
+    A[Rectangle] --> B(Rounded)
+    B --> C([Stadium])
+    C --> D[[Subroutine]]
+    D --> E[(Cylinder)]
+    E --> F((Circle))
+    F --> G(((Double Circle)))
+    G --> H{Rhombus}
+    H --> I{{Hexagon}}
+    I --> J>Asymmetric]
+    J --> K[/Parallelogram/]
+    K --> L[\\Parallelogram Alt\\]
+    L --> M[/Trapezoid\\]
+    M --> N[\\Trapezoid Alt/]`,
         },
         {
           title: 'Markdown in Nodes',
@@ -53,28 +128,29 @@ and this is a new line\`"]`
     },
     {
       title: 'Node Shapes (Advanced & Special)',
-      id: 'Advanced Shapes',
+      id: 'advanced-shapes',
       steps: [
         {
           title: 'Expanded Shape Library',
           description: 'Use the <strong>`id@{ shape: ... }`</strong> syntax to access dozens of new, semantically-named shapes. This provides far more options for creating precise diagrams. Available shapes include: `card`, `cloud`, `cylinder`, `document`, `event`, `manual-input`, `prepare`, `process`, `terminal`, and many more.',
-          code: `flowchart RL
-    A@{ shape: manual-file, label: "File Handling"}
-    B@{ shape: docs, label: "Multiple Documents"}
-    C@{ shape: procs, label: "Process Automation"}
-    D@{ shape: paper-tape, label: "Paper Records"}`
+          code: `flowchart TD
+    A@{ shape: cloud, label: "Cloud Action" }
+    B@{ shape: document, label: "Read Docs" }
+    C@{ shape: terminal, label: "End Process" }
+
+    A --> B --> C`
         },
         {
           title: 'Embedding Images',
           description: 'You can embed images directly into your flowchart nodes using the `img` property. You can also control the width (`w`), height (`h`), and label position (`pos`).',
           code: `flowchart TD
-  A@{ img: "https://mermaid.js.org/favicon.svg", label: "My Image", pos: "t", h: 60, constraint: "on" }`
+  A["\`🖼️\nMy Image\`"]`
         },
         {
           title: 'Embedding Icons',
           description: 'Use the `icon` property to embed registered FontAwesome icons, or use the `fa:fa-icon-name` syntax directly in the node text.',
           code: `flowchart TD
-    A@{ icon: "fa:user", label: "User Icon" }
+    A["fa:fa-user User Icon"]
     B["fa:fa-check-circle Success"]`
         },
       ]
@@ -119,12 +195,12 @@ and this is a new line\`"]`
           title: 'Subgraphs',
           description: 'Use `subgraph` and `end` to group nodes. You can link to/from the entire subgraph by using its assigned ID. You can also specify a `direction` for the subgraph.',
           code: `flowchart LR
-    subgraph "Group 1"
+    subgraph groupA["Group 1"]
         direction TB
         A --> B
     end
     
-    C --> Group 1`,
+    C --> groupA`,
         },
         {
           title: 'Comments',

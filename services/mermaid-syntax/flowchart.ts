@@ -1,4 +1,5 @@
 import type { DiagramSyntax } from '../../types';
+import { getAdvancedShapesDetail } from './shapes';
 
 export const flowchartSyntax: DiagramSyntax = {
     keywords: ['graph', 'flowchart'],
@@ -13,6 +14,7 @@ export const flowchartSyntax: DiagramSyntax = {
             },
             category: 'Declaration',
         },
+        // LINKS
         {
             matcher: /-->|@-->/,
             explanation: {
@@ -94,34 +96,52 @@ export const flowchartSyntax: DiagramSyntax = {
             },
             category: 'Links',
         },
+        // NODES (Ordered from most-specific to least-specific)
         {
-            matcher: /\[.*\]/,
+            matcher: /@\{.*\}/,
             explanation: {
-                title: 'Node (Rectangle)',
-                description: 'Defines a node with a rectangular shape. Text is placed inside the brackets.',
-                example: 'A["Hard edge"]'
+                title: 'Advanced Properties',
+                description: 'Uses a modern, structured syntax to define a node with a specific shape from an expanded library, set properties for edges like animations, or embed icons and images.',
+                example: 'A@{ shape: cloud, label: "Cloud Action" }\ne1@{ animation: fast }'
             },
             category: 'Nodes',
+            details: [
+                {
+                    keywords: ['shape'],
+                    explanation: {
+                        title: 'Property: shape',
+                        description: `Specifies the shape of the node from an expanded library of semantically-named shapes. Click on a shape name in your code to see the full list.`,
+                        example: 'shape: cloud'
+                    },
+                    values: [ getAdvancedShapesDetail() ]
+                },
+                {
+                    keywords: ['label'],
+                    explanation: {
+                        title: 'Property: label',
+                        description: 'Sets the text content displayed inside the node. Markdown can be used if enclosed in backticks.',
+                        example: 'label: "`My **bold** text`"'
+                    }
+                },
+                {
+                    keywords: ['icon'],
+                    explanation: {
+                        title: 'Property: icon',
+                        description: 'Embeds a registered FontAwesome icon into the node.',
+                        example: 'icon: "fa-user"'
+                    }
+                },
+                {
+                    keywords: ['img'],
+                    explanation: {
+                        title: 'Property: img',
+                        description: 'Embeds an image from a URL into the node. You can also control width (w), height (h), and label position (pos).',
+                        example: 'img: "https://.../image.png"'
+                    }
+                }
+            ]
         },
         {
-            matcher: /\(.*\)/,
-            explanation: {
-                title: 'Node (Round Edges)',
-                description: 'Defines a node with rounded edges. Text is placed inside the parentheses.',
-                example: 'B("Round edge")'
-            },
-            category: 'Nodes',
-        },
-        {
-            matcher: /\(\[.*\]\)/,
-            explanation: {
-                title: 'Node (Stadium)',
-                description: 'Defines a node with a stadium shape (a rectangle with fully rounded ends).',
-                example: 'C(["Stadium shape"])'
-            },
-            category: 'Nodes',
-        },
-         {
             matcher: /\(\(\(.*\)\)\)/,
             explanation: {
                 title: 'Node (Double Circle)',
@@ -130,7 +150,7 @@ export const flowchartSyntax: DiagramSyntax = {
             },
             category: 'Nodes',
         },
-         {
+        {
             matcher: /\(\(.*\)\)/,
             explanation: {
                 title: 'Node (Circle)',
@@ -140,20 +160,11 @@ export const flowchartSyntax: DiagramSyntax = {
             category: 'Nodes',
         },
         {
-            matcher: /\{.*\}/,
+            matcher: /\(\[.*\]\)/,
             explanation: {
-                title: 'Node (Rhombus/Decision)',
-                description: 'Defines a node with a rhombus shape, typically used for decisions.',
-                example: 'E{"Decision shape"}'
-            },
-            category: 'Nodes',
-        },
-        {
-            matcher: />.*]/,
-            explanation: {
-                title: 'Node (Asymmetric)',
-                description: 'Defines a node with an asymmetric shape, often used to represent data stores.',
-                example: 'F>"Asymmetric shape"]'
+                title: 'Node (Stadium)',
+                description: 'Defines a node with a stadium shape (a rectangle with fully rounded ends).',
+                example: 'C(["Stadium shape"])'
             },
             category: 'Nodes',
         },
@@ -176,11 +187,11 @@ export const flowchartSyntax: DiagramSyntax = {
             category: 'Nodes',
         },
         {
-            matcher: /\{\{.*\}\}/,
+            matcher: /\[\/.*\\\]|\[\\.*\/\]/,
             explanation: {
-                title: 'Node (Hexagon)',
-                description: 'Defines a node with a hexagonal shape.',
-                example: 'I{{Hexagon}}'
+                title: 'Node (Trapezoid)',
+                description: 'Defines a node with a trapezoid shape, either standard or inverted.',
+                example: 'L[/Trapezoid/]\nM[\\Trapezoid Alt/]'
             },
             category: 'Nodes',
         },
@@ -194,23 +205,60 @@ export const flowchartSyntax: DiagramSyntax = {
             category: 'Nodes',
         },
         {
-            matcher: /\[\/.*\\\]|\[\\.*\/\]/,
+            matcher: /\{\{.*\}\}/,
             explanation: {
-                title: 'Node (Trapezoid)',
-                description: 'Defines a node with a trapezoid shape, either standard or inverted.',
-                example: 'L[/Trapezoid/]\nM[\\Trapezoid Alt/]'
+                title: 'Node (Hexagon)',
+                description: 'Defines a node with a hexagonal shape.',
+                example: 'I{{Hexagon}}'
             },
             category: 'Nodes',
         },
         {
-            matcher: /@\{.*\}/,
+            matcher: /\(.*\)/,
             explanation: {
-                title: 'Advanced Properties',
-                description: 'Uses the new syntax to define a node with a specific shape from an expanded library, set properties for edges like animations, or embed icons and images.',
-                example: 'A@{ shape: cloud, label: "Cloud Action" }\ne1@{ animation: fast }'
+                title: 'Node (Round Edges)',
+                description: 'Defines a node with rounded edges. Text is placed inside the parentheses.',
+                example: 'B("Round edge")'
             },
             category: 'Nodes',
         },
+        {
+            matcher: /\[.*\]/,
+            explanation: {
+                title: 'Node (Rectangle)',
+                description: 'Defines a node with a rectangular shape. Text is placed inside the brackets.',
+                example: 'A["Hard edge"]'
+            },
+            category: 'Nodes',
+        },
+        {
+            matcher: /\{.*\}/,
+            explanation: {
+                title: 'Node (Rhombus/Decision)',
+                description: 'Defines a node with a rhombus shape, typically used for decisions.',
+                example: 'E{"Decision shape"}'
+            },
+            category: 'Nodes',
+        },
+        {
+            matcher: />.*]/,
+            explanation: {
+                title: 'Node (Asymmetric)',
+                description: 'Defines a node with an asymmetric shape, often used to represent data stores.',
+                example: 'F>"Asymmetric shape"]'
+            },
+            category: 'Nodes',
+        },
+        {
+            matcher: /\bfa:\S+/,
+            explanation: {
+                title: 'Font Awesome Icon',
+                description: 'Embeds a Font Awesome icon within a node\'s text. The appropriate Font Awesome CSS file must be loaded on the page.',
+                example: 'A["fa:fa-check-circle Success"]'
+            },
+            category: 'Nodes',
+        },
+        // STRUCTURE
         {
             matcher: /subgraph/,
             explanation: {
@@ -220,6 +268,7 @@ export const flowchartSyntax: DiagramSyntax = {
             },
             category: 'Structure',
         },
+        // INTERACTIVITY
          {
             matcher: /click\s/,
             explanation: {
@@ -229,6 +278,7 @@ export const flowchartSyntax: DiagramSyntax = {
             },
             category: 'Interactivity',
         },
+        // STYLING
          {
             matcher: /:::/,
             explanation: {
@@ -246,15 +296,6 @@ export const flowchartSyntax: DiagramSyntax = {
                 example: 'style A fill:#f00,stroke:#fff'
             },
             category: 'Styling',
-        },
-        {
-            matcher: /\bfa:\S+/,
-            explanation: {
-                title: 'Font Awesome Icon',
-                description: 'Embeds a Font Awesome icon within a node\'s text. The appropriate Font Awesome CSS file must be loaded on the page.',
-                example: 'A["fa:fa-check-circle Success"]'
-            },
-            category: 'Nodes',
         },
     ]
 };
