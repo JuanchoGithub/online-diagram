@@ -5,8 +5,10 @@ import { Button } from '../Button';
 import { ShapesPalette } from '../ShapesPalette';
 import type { Shape } from '../shapesData';
 import { MoveToSubgraphModal } from '../MoveToSubgraphModal';
+import { ConfirmationModal } from '../ConfirmationModal';
 // FIX: Removed parseLinkLine from import to resolve incorrect function usage and prevent potential circular dependencies.
-import { FormattingPanel, getAllLinks } from '../FormattingPanel';
+// Fix: Import `parseLinkLine` from `FormattingPanel` to resolve the 'Cannot find name' error. It is safe to import now because the original circular dependency was broken by moving other helper functions.
+import { FormattingPanel, getAllLinks, parseLinkLine } from '../FormattingPanel';
 
 interface VisualBuilderViewProps {
     code: string;
@@ -334,6 +336,67 @@ const parseLinkLineForSourceTarget = (line: string): { source: string; target: s
     return null;
 };
 
+const getInternalNodeIds = (subgraphCodeLines: string[]): Set<string> => {
+    const nodeIds = new Set<string>();
+    const nodeDefRegex = /^\s*([\w\d.-]+)/;
+
+    subgraphCodeLines.forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed || /^(subgraph|end|direction|classDef|class|style|linkStyle|%%)/.test(trimmed)) {
+            return;
+        }
+
+        const linkParts = parseLinkLineForSourceTarget(trimmed);
+        if (linkParts) {
+            nodeIds.add(linkParts.source);
+            nodeIds.add(linkParts.target);
+        } else {
+            const nodeMatch = trimmed.match(nodeDefRegex);
+            if (nodeMatch && nodeMatch[1]) {
+                nodeIds.add(nodeMatch[1]);
+            }
+        }
+    });
+
+    return nodeIds;
+};
+
+// Helper to build a map of which subgraph a node first belongs to.
+const buildNodeToSubgraphMap = (code: string): Map<string, string> => {
+    const lines = code.split('\n');
+    const nodeMap = new Map<string, string>();
+    const currentSubgraphStack: string[] = [];
+    const nodeDefRegex = /^\s*([\w\d.-]+)/;
+    const subgraphDefRegex = /subgraph\s+(?:\w+\s*\[\s*"([^"]+)"\s*\]|"([^"]+)"|(\w+))/;
+
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('subgraph ')) {
+            const match = trimmed.match(subgraphDefRegex);
+            const subgraphLabel = match ? (match[1] || match[2] || match[3]) : `subgraph_${currentSubgraphStack.length}`;
+            currentSubgraphStack.push(subgraphLabel);
+        } else if (trimmed === 'end') {
+            currentSubgraphStack.pop();
+        } else if (!/^(direction|classDef|class|style|linkStyle|%%)/.test(trimmed)) {
+            const currentSubgraph = currentSubgraphStack.length > 0 ? currentSubgraphStack[currentSubgraphStack.length - 1] : null;
+            if (currentSubgraph) {
+                 const linkParts = parseLinkLineForSourceTarget(trimmed);
+                 if (linkParts) {
+                     // A node belongs to the subgraph where it is first mentioned.
+                     if (!nodeMap.has(linkParts.source)) nodeMap.set(linkParts.source, currentSubgraph);
+                     if (!nodeMap.has(linkParts.target)) nodeMap.set(linkParts.target, currentSubgraph);
+                 } else {
+                     const nodeMatch = trimmed.match(nodeDefRegex);
+                     if (nodeMatch && nodeMatch[1]) {
+                        if (!nodeMap.has(nodeMatch[1])) nodeMap.set(nodeMatch[1], currentSubgraph);
+                     }
+                 }
+            }
+        }
+    }
+    return nodeMap;
+};
+
 export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCodeChange, theme, showToast }) => {
     const [svgContent, setSvgContent] = useState('');
     const [error, setError] = useState<string | null>(null);
@@ -357,6 +420,26 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
     const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
     const [isPanning, setIsPanning] = useState(false);
     const [startPoint, setStartPoint] = useState({ x: 0, y: 0 });
+
+    const [confirmationState, setConfirmationState] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: React.ReactNode;
+        onConfirm: () => void;
+        onClose: () => void;
+        confirmText?: string;
+        cancelText?: string;
+        confirmButtonClass?: string;
+        onSecondaryAction?: () => void;
+        secondaryActionText?: string;
+        secondaryActionButtonClass?: string;
+    }>({
+        isOpen: false,
+        title: '',
+        message: '',
+        onConfirm: () => {},
+        onClose: () => {},
+    });
 
     const nodeCounterRef = useRef(1);
     const subgraphCounterRef = useRef(1);
@@ -406,15 +489,19 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
         if (!selectedObject) return;
 
         const { id, type } = selectedObject;
-        let lines = code.split('\n');
-        let finalCode = code;
+        const closeConfirmation = () => setConfirmationState(s => ({ ...s, isOpen: false }));
 
         if (type === 'node') {
             const nodeId = formatNodeId(id);
+            const nodeObject = diagramObjects.nodes.find(n => n.id === id);
+            const nodeLabel = nodeObject?.label || nodeId;
+
+            const nodeToSubgraphMap = buildNodeToSubgraphMap(code);
+            let lines = code.split('\n');
             const linesToDelete = new Set<number>();
             const neighborNodes = new Set<string>();
+            let deletedLinks = 0;
 
-            // --- PRE-DELETE ANALYSIS: Build a map of "perfect" definitions using trusted labels from UI state ---
             const preDeleteBestDefs = new Map<string, string>();
             const allObjects = [...diagramObjects.nodes, ...diagramObjects.subgraphs];
             for (const obj of allObjects) {
@@ -426,26 +513,14 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
                     const bestDef = reconstructDefinition(currentId, defFromCode, trustedLabel);
                     preDeleteBestDefs.set(currentId, bestDef);
                 } else {
-                    preDeleteBestDefs.set(currentId, currentId); // Fallback
+                    preDeleteBestDefs.set(currentId, currentId);
                 }
             }
-            showToast(`DEBUG: --- PRE-DELETE ANALYSIS (Reconstructed) ---`, 'info');
-            for (const [nodeId, def] of preDeleteBestDefs.entries()) {
-                showToast(`DEBUG: Pre-delete best def for '${nodeId}': ${def}`, 'info');
-            }
-            showToast(`DEBUG: --- STARTING DELETE FOR '${nodeId}' ---`, 'info');
-            // --- END PRE-DELETE ANALYSIS ---
 
-
-            // Pass 1: Identify lines to delete and find neighbors
-            showToast(`DEBUG: Pass 1: Identifying lines and neighbors...`, 'info');
             lines.forEach((line, index) => {
                 const trimmed = line.trim();
                 const wordBoundaryNodeRegex = new RegExp(`\\b${nodeId}\\b`);
-
-                if (!wordBoundaryNodeRegex.test(trimmed)) {
-                    return;
-                }
+                if (!wordBoundaryNodeRegex.test(trimmed)) return;
 
                 let shouldDelete = false;
                 const linkArrowRegex = /(?:--.*?-->|-->|---|~~~|==>|<-->|--o|o--o|--x|x--x|-\.->)/;
@@ -455,6 +530,7 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
                         const { source, target } = linkParts;
                         if (source === nodeId || target === nodeId) {
                             shouldDelete = true;
+                            deletedLinks++;
                             if (source && source !== nodeId) neighborNodes.add(source);
                             if (target && target !== nodeId) neighborNodes.add(target);
                         }
@@ -479,100 +555,371 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
                         }
                     }
                 }
-
-                if (shouldDelete) {
-                    linesToDelete.add(index);
-                    showToast(`DEBUG: - Marking line ${index + 1} for deletion: "${line.trim()}"`, 'info');
-                }
+                if (shouldDelete) linesToDelete.add(index);
             });
 
-            // Pass 2: Analyze neighbors and decide which definitions to preserve
-            showToast(`DEBUG: Pass 2: Analyzing ${neighborNodes.size} neighbors...`, 'info');
             const definitionsToAdd = new Set<string>();
             const intermediateLines = lines.filter((_, i) => !linesToDelete.has(i));
-
             for (const neighborId of neighborNodes) {
-                showToast(`DEBUG: Analyzing neighbor '${neighborId}'`, 'info');
                 const bestDefInOriginal = preDeleteBestDefs.get(neighborId) || neighborId;
-                showToast(`DEBUG: - Original best def: ${bestDefInOriginal}`, 'info');
-
                 const bestDefInIntermediate = findNodeSyntaxInCode(intermediateLines, neighborId);
-                showToast(`DEBUG: - Intermediate best def: ${bestDefInIntermediate || 'null'}`, 'info');
-
                 if (bestDefInOriginal && (!bestDefInIntermediate || bestDefInIntermediate.length < bestDefInOriginal.length)) {
                     definitionsToAdd.add(bestDefInOriginal);
-                    showToast(`DEBUG:   - DECISION: Preserve definition for '${neighborId}': "${bestDefInOriginal}"`, 'info');
-                } else {
-                     showToast(`DEBUG:   - DECISION: No preservation needed for '${neighborId}'`, 'info');
                 }
             }
 
-            // Pass 3: Reconstruct the code
-            showToast(`DEBUG: Pass 3: Reconstructing code...`, 'info');
             let finalLines = intermediateLines;
             if (definitionsToAdd.size > 0) {
                 let insertIndex = finalLines.findIndex(line => line.trim().startsWith('graph') || line.trim().startsWith('flowchart'));
                 insertIndex = (insertIndex === -1) ? 0 : insertIndex + 1;
-
                 while (insertIndex < finalLines.length && (finalLines[insertIndex].trim() === '' || finalLines[insertIndex].trim().startsWith('direction'))) {
                     insertIndex++;
                 }
-                
                 const indentation = '    ';
                 const definitionsArray = Array.from(definitionsToAdd).map(def => `${indentation}${def}`);
                 finalLines.splice(insertIndex, 0, ...definitionsArray);
-                showToast(`DEBUG: - Inserting ${definitionsArray.length} preserved definitions at line ${insertIndex + 1}`, 'info');
-
-            } else {
-                showToast(`DEBUG: - No definitions to preserve.`, 'info');
             }
 
-            finalCode = finalLines.join('\n');
-        
-        } else if (type === 'edge') {
-            const linkIndex = findLinkIndex(finalCode, id);
-
-            if (linkIndex !== -1) {
-                const allLinks = getAllLinks(finalCode);
-                if (linkIndex < allLinks.length) {
-                    const linkToDel = allLinks[linkIndex];
-                    lines = lines.filter((_, index) => index !== linkToDel.lineIndex);
-                    finalCode = lines.join('\n');
+            // Post-processing to ensure neighbor nodes remain in their subgraphs
+            const nodesStillInSubgraphBlocks = new Map<string, Set<string>>();
+            const subgraphStack: string[] = [];
+            const subgraphDefRegex = /subgraph\s+(?:\w+\s*\[\s*"([^"]+)"\s*\]|"([^"]+)"|(\w+))/;
+            const nodeMentionRegex = /^\s*([\w\d.-]+)/;
+            
+            finalLines.forEach(line => {
+                const trimmed = line.trim();
+                if (trimmed.startsWith('subgraph ')) {
+                    const match = trimmed.match(subgraphDefRegex);
+                    const currentSubgraphLabel = match ? (match[1] || match[2] || match[3]) : `subgraph_${subgraphStack.length}`;
+                    subgraphStack.push(currentSubgraphLabel);
+                    if (!nodesStillInSubgraphBlocks.has(currentSubgraphLabel)) {
+                        nodesStillInSubgraphBlocks.set(currentSubgraphLabel, new Set<string>());
+                    }
+                } else if (trimmed === 'end') {
+                    subgraphStack.pop();
+                } else {
+                    const currentSubgraph = subgraphStack.length > 0 ? subgraphStack[subgraphStack.length - 1] : null;
+                    if (currentSubgraph && !/^(direction|classDef|class|style|linkStyle|%%)/.test(trimmed)) {
+                        const linkParts = parseLinkLineForSourceTarget(trimmed);
+                        if (linkParts) {
+                            nodesStillInSubgraphBlocks.get(currentSubgraph)?.add(linkParts.source);
+                            nodesStillInSubgraphBlocks.get(currentSubgraph)?.add(linkParts.target);
+                        } else {
+                            const nodeMatch = trimmed.match(nodeMentionRegex);
+                            if (nodeMatch && nodeMatch[1]) {
+                                nodesStillInSubgraphBlocks.get(currentSubgraph)?.add(nodeMatch[1]);
+                            }
+                        }
+                    }
+                }
+            });
+            
+            const nodesToReinsert = new Map<string, string[]>();
+            for (const neighborId of neighborNodes) {
+                const initialSubgraphLabel = nodeToSubgraphMap.get(neighborId);
+                if (initialSubgraphLabel) {
+                    const mentionedNodes = nodesStillInSubgraphBlocks.get(initialSubgraphLabel);
+                    if (mentionedNodes && !mentionedNodes.has(neighborId)) {
+                        if (!nodesToReinsert.has(initialSubgraphLabel)) {
+                            nodesToReinsert.set(initialSubgraphLabel, []);
+                        }
+                        nodesToReinsert.get(initialSubgraphLabel)?.push(neighborId);
+                    }
                 }
             }
 
-        } else if (type === 'subgraph') {
-             let startIndex = -1;
-             const subgraphRegex = new RegExp(`^(\\s*)subgraph\\s+${id}\\b`);
-             for (let i = 0; i < lines.length; i++) {
-                 if (subgraphRegex.test(lines[i])) {
-                     startIndex = i;
-                     break;
-                 }
-             }
+            if (nodesToReinsert.size > 0) {
+                const finalLinesWithReinsertion: string[] = [];
+                finalLines.forEach(line => {
+                    finalLinesWithReinsertion.push(line);
+                    const trimmed = line.trim();
+                    if (trimmed.startsWith('subgraph ')) {
+                        const match = trimmed.match(subgraphDefRegex);
+                        const currentSubgraphLabel = match ? (match[1] || match[2] || match[3]) : null;
+                        if (currentSubgraphLabel && nodesToReinsert.has(currentSubgraphLabel)) {
+                            const indentation = line.match(/^\s*/)?.[0] || '';
+                            const orphans = nodesToReinsert.get(currentSubgraphLabel) || [];
+                            orphans.forEach(orphanId => {
+                                finalLinesWithReinsertion.push(`${indentation}    ${orphanId}`);
+                            });
+                            nodesToReinsert.delete(currentSubgraphLabel);
+                        }
+                    }
+                });
+                finalLines = finalLinesWithReinsertion;
+            }
 
-             if (startIndex !== -1) {
-                 let depth = 1;
-                 let endIndex = -1;
-                 for (let i = startIndex + 1; i < lines.length; i++) {
-                     const trimmed = lines[i].trim();
-                     if (trimmed.startsWith('subgraph ')) depth++;
-                     if (trimmed === 'end') depth--;
-                     if (depth === 0) {
-                         endIndex = i;
-                         break;
-                     }
-                 }
-                 if (endIndex !== -1) {
-                    lines.splice(startIndex, endIndex - startIndex + 1);
-                    finalCode = lines.join('\n');
-                 }
-             }
+            onCodeChange(finalLines.join('\n').replace(/\n\n+/g, '\n').trim());
+            showToast(`Node "${nodeLabel}" and ${deletedLinks} link(s) deleted.`, 'success');
+            setSelectedObject(null);
+
+        } else if (type === 'edge') {
+            const edgeObject = diagramObjects.edges.find(e => e.id === id);
+            if (!edgeObject) return;
+
+            const sourceNode = diagramObjects.nodes.find(n => formatNodeId(n.id) === edgeObject.sourceId);
+            const targetNode = diagramObjects.nodes.find(n => formatNodeId(n.id) === edgeObject.targetId);
+            const sourceLabel = sourceNode?.label || edgeObject.sourceId;
+            const targetLabel = targetNode?.label || edgeObject.targetId;
+
+            setConfirmationState({
+                isOpen: true,
+                title: 'Confirm Link Deletion',
+                message: <p>Are you sure you want to delete the link from <strong>"{sourceLabel}"</strong> to <strong>"{targetLabel}"</strong>?</p>,
+                onConfirm: () => {
+                    const linkIndex = findLinkIndex(code, id);
+                    if (linkIndex !== -1) {
+                        const allLinks = getAllLinks(code);
+                        if (linkIndex < allLinks.length) {
+                            const linkToDel = allLinks[linkIndex];
+                            const lines = code.split('\n').filter((_, index) => index !== linkToDel.lineIndex);
+                            onCodeChange(lines.join('\n'));
+                        }
+                    }
+                    showToast(`Link from "${sourceLabel}" to "${targetLabel}" deleted.`, 'success');
+                    setSelectedObject(null);
+                    closeConfirmation();
+                },
+                onClose: () => {
+                    showToast('Link deletion cancelled.', 'info');
+                    closeConfirmation();
+                }
+            });
+
+        } else if (type === 'subgraph') {
+            const subgraphObject = diagramObjects.subgraphs.find(s => s.id === id);
+            if (!subgraphObject) {
+                showToast('Could not find subgraph data.', 'error');
+                return;
+            }
+            const label = subgraphObject.label;
+            const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+            const subgraphRegex = new RegExp(
+                `^(\\s*)subgraph\\s+(?:` +
+                `\\w+\\s*\\[\\s*"${escapedLabel}"\\s*\\]|` +
+                `"${escapedLabel}"|` +
+                (label.match(/\s/) ? '(?!)' : `${escapedLabel}\\b`) +
+                `)`
+            );
+            
+            let lines = code.split('\n');
+            let startIndex = lines.findIndex(line => subgraphRegex.test(line.trim()));
+    
+            if (startIndex === -1) {
+                const subgraphId = formatNodeId(id);
+                const fallbackRegex = new RegExp(`^(\\s*)subgraph\\s+(?:${subgraphId}|\"${subgraphId}\"|${subgraphId}\\[.*?\\])\\b`);
+                startIndex = lines.findIndex(line => fallbackRegex.test(line.trim()));
+    
+                if (startIndex === -1) {
+                    showToast('Could not find subgraph definition in code.', 'error');
+                    return;
+                }
+            }
+        
+            let depth = 1;
+            let endIndex = -1;
+            for (let i = startIndex + 1; i < lines.length; i++) {
+                const trimmed = lines[i].trim();
+                if (trimmed.startsWith('subgraph ')) depth++;
+                if (trimmed === 'end') depth--;
+                if (depth === 0) {
+                    endIndex = i;
+                    break;
+                }
+            }
+        
+            if (endIndex === -1) {
+                showToast('Could not find matching "end" for subgraph.', 'error');
+                return;
+            }
+            
+            const handleDeleteEverything = () => {
+                const currentLines = code.split('\n');
+                
+                const nodeToSubgraphMap = buildNodeToSubgraphMap(code);
+
+                const preDeleteBestDefs = new Map<string, string>();
+                for (const obj of diagramObjects.nodes) {
+                    const currentId = formatNodeId(obj.id);
+                    const trustedLabel = obj.label;
+                    const defFromCode = findNodeSyntaxInCode(currentLines, currentId);
+                    if (defFromCode) {
+                        const bestDef = reconstructDefinition(currentId, defFromCode, trustedLabel);
+                        preDeleteBestDefs.set(currentId, bestDef);
+                    } else {
+                        preDeleteBestDefs.set(currentId, currentId);
+                    }
+                }
+                
+                const subgraphCodeContent = currentLines.slice(startIndex + 1, endIndex);
+                const internalNodeIds = getInternalNodeIds(subgraphCodeContent);
+
+                const linesToDelete = new Set<number>();
+                const neighborNodes = new Set<string>();
+
+                for (let i = startIndex; i <= endIndex; i++) {
+                    linesToDelete.add(i);
+                }
+
+                currentLines.forEach((line, index) => {
+                    if (linesToDelete.has(index)) return;
+
+                    const trimmed = line.trim();
+                    const linkParts = parseLinkLineForSourceTarget(trimmed);
+                    
+                    if (linkParts) {
+                        const { source, target } = linkParts;
+                        const isSourceInternal = internalNodeIds.has(source);
+                        const isTargetInternal = internalNodeIds.has(target);
+
+                        if ((isSourceInternal && !isTargetInternal) || (!isSourceInternal && isTargetInternal)) {
+                            linesToDelete.add(index);
+                            if (!isSourceInternal) neighborNodes.add(source);
+                            if (!isTargetInternal) neighborNodes.add(target);
+                        }
+                    }
+                });
+                
+                const intermediateLines = currentLines.filter((_, i) => !linesToDelete.has(i));
+
+                const definitionsToAdd = new Set<string>();
+                for (const neighborId of neighborNodes) {
+                    if (internalNodeIds.has(neighborId)) continue;
+
+                    const bestDefInOriginal = preDeleteBestDefs.get(neighborId) || neighborId;
+                    const bestDefInIntermediate = findNodeSyntaxInCode(intermediateLines, neighborId);
+                    
+                    if (bestDefInOriginal && (!bestDefInIntermediate || bestDefInIntermediate.length < bestDefInOriginal.length)) {
+                        definitionsToAdd.add(bestDefInOriginal);
+                    }
+                }
+
+                let finalLines = intermediateLines;
+                if (definitionsToAdd.size > 0) {
+                    let insertIndex = finalLines.findIndex(l => l.trim().startsWith('graph') || l.trim().startsWith('flowchart'));
+                    insertIndex = (insertIndex === -1) ? 0 : insertIndex + 1;
+                    while (insertIndex < finalLines.length && (finalLines[insertIndex].trim() === '' || finalLines[insertIndex].trim().startsWith('direction'))) {
+                        insertIndex++;
+                    }
+                    const indentation = '    ';
+                    const definitionsArray = Array.from(definitionsToAdd).map(def => `${indentation}${def}`);
+                    finalLines.splice(insertIndex, 0, ...definitionsArray);
+                }
+                
+                // Post-processing to ensure nodes remain in their subgraphs
+                const nodesStillInSubgraphBlocks = new Map<string, Set<string>>();
+                const subgraphStack: string[] = [];
+                const subgraphDefRegex = /subgraph\s+(?:\w+\s*\[\s*"([^"]+)"\s*\]|"([^"]+)"|(\w+))/;
+                const nodeMentionRegex = /^\s*([\w\d.-]+)/;
+                
+                finalLines.forEach(line => {
+                    const trimmed = line.trim();
+                    if (trimmed.startsWith('subgraph ')) {
+                        const match = trimmed.match(subgraphDefRegex);
+                        const currentSubgraphLabel = match ? (match[1] || match[2] || match[3]) : `subgraph_${subgraphStack.length}`;
+                        subgraphStack.push(currentSubgraphLabel);
+                        if (!nodesStillInSubgraphBlocks.has(currentSubgraphLabel)) {
+                            nodesStillInSubgraphBlocks.set(currentSubgraphLabel, new Set<string>());
+                        }
+                    } else if (trimmed === 'end') {
+                        subgraphStack.pop();
+                    } else {
+                        const currentSubgraph = subgraphStack.length > 0 ? subgraphStack[subgraphStack.length - 1] : null;
+                        if (currentSubgraph && !/^(direction|classDef|class|style|linkStyle|%%)/.test(trimmed)) {
+                            const linkParts = parseLinkLineForSourceTarget(trimmed);
+                            if (linkParts) {
+                                nodesStillInSubgraphBlocks.get(currentSubgraph)?.add(linkParts.source);
+                                nodesStillInSubgraphBlocks.get(currentSubgraph)?.add(linkParts.target);
+                            } else {
+                                const nodeMatch = trimmed.match(nodeMentionRegex);
+                                if (nodeMatch && nodeMatch[1]) {
+                                    nodesStillInSubgraphBlocks.get(currentSubgraph)?.add(nodeMatch[1]);
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                const nodesToReinsert = new Map<string, string[]>();
+                for (const [nodeId, initialSubgraphLabel] of nodeToSubgraphMap.entries()) {
+                    if (initialSubgraphLabel !== label && !internalNodeIds.has(nodeId)) {
+                        const mentionedNodes = nodesStillInSubgraphBlocks.get(initialSubgraphLabel);
+                        if (mentionedNodes && !mentionedNodes.has(nodeId)) {
+                            if (!nodesToReinsert.has(initialSubgraphLabel)) {
+                                nodesToReinsert.set(initialSubgraphLabel, []);
+                            }
+                            nodesToReinsert.get(initialSubgraphLabel)?.push(nodeId);
+                        }
+                    }
+                }
+
+                if (nodesToReinsert.size > 0) {
+                    const finalLinesWithReinsertion: string[] = [];
+                    finalLines.forEach(line => {
+                        finalLinesWithReinsertion.push(line);
+                        const trimmed = line.trim();
+                        if (trimmed.startsWith('subgraph ')) {
+                            const match = trimmed.match(subgraphDefRegex);
+                            const currentSubgraphLabel = match ? (match[1] || match[2] || match[3]) : null;
+                            if (currentSubgraphLabel && nodesToReinsert.has(currentSubgraphLabel)) {
+                                const indentation = line.match(/^\s*/)?.[0] || '';
+                                const orphans = nodesToReinsert.get(currentSubgraphLabel) || [];
+                                orphans.forEach(orphanId => {
+                                    finalLinesWithReinsertion.push(`${indentation}    ${orphanId}`);
+                                });
+                                nodesToReinsert.delete(currentSubgraphLabel);
+                            }
+                        }
+                    });
+                    finalLines = finalLinesWithReinsertion;
+                }
+                const objectsInsideCount = internalNodeIds.size;
+                onCodeChange(finalLines.join('\n').replace(/\n\n+/g, '\n').trim());
+                showToast(`Subgraph "${label}" and its ${objectsInsideCount} child object(s) were deleted.`, 'success');
+                setSelectedObject(null);
+                closeConfirmation();
+            };
+
+            const handleDeleteContainerOnly = () => {
+                let currentLines = code.split('\n');
+                currentLines.splice(endIndex, 1);
+                currentLines.splice(startIndex, 1);
+                onCodeChange(currentLines.join('\n').replace(/\n\n+/g, '\n').trim());
+                showToast(`Subgraph "${label}" container deleted. Contents have been preserved.`, 'success');
+                setSelectedObject(null);
+                closeConfirmation();
+            };
+
+            const currentLines = code.split('\n');
+            const subgraphCodeContent = currentLines.slice(startIndex + 1, endIndex);
+            const internalNodeIds = getInternalNodeIds(subgraphCodeContent);
+            const objectsInsideCount = internalNodeIds.size;
+
+            setConfirmationState({
+                isOpen: true,
+                title: `Delete Subgraph "${label}"`,
+                message: (
+                    <div className="space-y-2">
+                        <p>This subgraph contains <strong>{objectsInsideCount} object(s)</strong>.</p>
+                        <p>Please choose how you would like to proceed.</p>
+                    </div>
+                ),
+                onConfirm: handleDeleteEverything,
+                confirmText: 'Delete Everything',
+                confirmButtonClass: '!bg-red-600 hover:!bg-red-700',
+                
+                onSecondaryAction: handleDeleteContainerOnly,
+                secondaryActionText: 'Delete Container Only',
+                secondaryActionButtonClass: '!bg-yellow-600 hover:!bg-yellow-700',
+
+                onClose: () => {
+                    showToast('Deletion cancelled.', 'info');
+                    closeConfirmation();
+                },
+            });
         }
     
-        onCodeChange(finalCode.replace(/\n\n+/g, '\n').trim());
-        showToast(`${type.charAt(0).toUpperCase() + type.slice(1)} '${formatNodeId(id)}' deleted.`, 'success');
-        setSelectedObject(null);
     }, [selectedObject, code, onCodeChange, showToast, diagramObjects]);
     
     const handleDuplicateSelectedObject = useCallback(() => {
@@ -610,14 +957,34 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
             }
 
         } else if (type === 'subgraph') {
-             let startIndex = -1;
-             const subgraphRegex = new RegExp(`^(\\s*)subgraph\\s+(?:${id}|\"${id}\"|${id}\\[.*?\\])\\b`);
-             for (let i = 0; i < lines.length; i++) {
-                 if (subgraphRegex.test(lines[i])) {
-                     startIndex = i;
-                     break;
-                 }
-             }
+            const subgraphObject = diagramObjects.subgraphs.find(s => s.id === id);
+            if (!subgraphObject) {
+                showToast('Could not find subgraph data.', 'error');
+                return;
+            }
+            const label = subgraphObject.label;
+            const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+            const subgraphRegex = new RegExp(
+                `^(\\s*)subgraph\\s+(?:` +
+                `\\w+\\s*\\[\\s*"${escapedLabel}"\\s*\\]|` +
+                `"${escapedLabel}"|` +
+                (label.match(/\s/) ? '(?!)' : `${escapedLabel}\\b`) +
+                `)`
+            );
+            let startIndex = lines.findIndex(line => subgraphRegex.test(line.trim()));
+    
+            if (startIndex === -1) {
+                const subgraphId = formatNodeId(id);
+                const fallbackRegex = new RegExp(`^(\\s*)subgraph\\s+(?:${subgraphId}|\"${subgraphId}\"|${subgraphId}\\[.*?\\])\\b`);
+                startIndex = lines.findIndex(line => fallbackRegex.test(line.trim()));
+    
+                if (startIndex === -1) {
+                    showToast('Could not find subgraph definition to duplicate.', 'error');
+                    return;
+                }
+            }
+
              if (startIndex !== -1) {
                  let depth = 1;
                  let endIndex = -1;
@@ -633,8 +1000,9 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
                      const block = lines.slice(startIndex, endIndex + 1);
                      const idMap: Record<string, string> = {};
                      const suffix = `_copy`;
-                     const newSubgraphId = `${id}${suffix}`;
-                     idMap[id] = newSubgraphId;
+                     const subgraphId = formatNodeId(id); // This might be imperfect but used for seeding the map
+                     const newSubgraphId = `${subgraphId}${suffix}`;
+                     idMap[subgraphId] = newSubgraphId;
                      
                      const newBlock = block.map(line => {
                         let newLine = line;
@@ -659,7 +1027,7 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
 
         onCodeChange(finalCode);
         showToast(`${type.charAt(0).toUpperCase() + type.slice(1)} duplicated.`, 'success');
-    }, [selectedObject, code, onCodeChange, showToast]);
+    }, [selectedObject, code, onCodeChange, showToast, diagramObjects]);
 
     const handleRemoveFromSubgraph = useCallback(() => {
         if (selectedObject?.type !== 'node' || !nodeContext.isInSubgraph) return;
@@ -1208,6 +1576,20 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
                     onClose={() => setIsMoveToSubgraphModalOpen(false)}
                     subgraphs={diagramObjects.subgraphs}
                     onMove={handleMoveToSubgraph}
+                />
+
+                <ConfirmationModal
+                    isOpen={confirmationState.isOpen}
+                    onClose={confirmationState.onClose}
+                    onConfirm={confirmationState.onConfirm}
+                    title={confirmationState.title}
+                    message={confirmationState.message}
+                    confirmText={confirmationState.confirmText}
+                    cancelText={confirmationState.cancelText}
+                    confirmButtonClass={confirmationState.confirmButtonClass}
+                    onSecondaryAction={confirmationState.onSecondaryAction}
+                    secondaryActionText={confirmationState.secondaryActionText}
+                    secondaryActionButtonClass={confirmationState.secondaryActionButtonClass}
                 />
                 
                 <style>{`

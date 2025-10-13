@@ -6,6 +6,7 @@ interface IconProps {
 }
 
 // FIX: Replaced JSX.Element with React.ReactElement to resolve "Cannot find namespace 'JSX'" error.
+// Fix: Changed `JSX.Element` to `React.ReactElement` to resolve 'Cannot find namespace "JSX"' error, as `React` is imported and provides this type.
 const ICONS: { [key: string]: React.ReactElement } = {
     logo: <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />,
     editor: <path d="M10.89 2.11a2 2 0 012.22 0l8.66 5a2 2 0 011.11 1.73v10a2 2 0 01-1.11 1.73l-8.66 5a2 2 0 01-2.22 0l-8.66-5a2 2 0 01-1.11-1.73v-10a2 2 0 011.11-1.73l8.66-5zM12 22.09V12M22 8.91L12 12" />,
