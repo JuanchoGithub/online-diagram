@@ -26,7 +26,13 @@ const SHAPE_SYNTAX: Record<Node['shape'], [string, string]> = {
     circle: ['((', '))'],
 };
 
-export const VisualBuilderView: React.FC<{ onGenerateCode: (code: string, targetView: View) => void; theme: ThemeName; }> = ({ onGenerateCode, theme }) => {
+interface VisualBuilderViewProps {
+    onGenerateCode: (code: string, targetView: View) => void;
+    theme: ThemeName;
+    showToast: (message: string, type?: 'success' | 'info' | 'error') => void;
+}
+
+export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ onGenerateCode, theme, showToast }) => {
     const [nodes, setNodes] = useState<Node[]>([]);
     const [edges, setEdges] = useState<Edge[]>([]);
     const [generatedCode, setGeneratedCode] = useState('graph TD\n');
@@ -117,7 +123,7 @@ export const VisualBuilderView: React.FC<{ onGenerateCode: (code: string, target
                     </div>
                 </div>
                 <div className="h-[calc(100vh-28rem)]">
-                    <DiagramPreview code={generatedCode} onAction={() => {}} theme={theme} />
+                    <DiagramPreview code={generatedCode} showToast={showToast} theme={theme} />
                 </div>
             </div>
         </div>

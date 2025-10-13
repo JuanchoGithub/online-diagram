@@ -5,7 +5,8 @@ import { TutorialView } from './components/views/TutorialView';
 import { VisualBuilderView } from './components/views/VisualBuilderView';
 import { DiagramLibrary } from './components/DiagramLibrary';
 import { Toast } from './components/Toast';
-import type { View, ThemeName, Diagram } from './types';
+import { StatusBar } from './components/StatusBar';
+import type { View, ThemeName, Diagram, LogEntry } from './types';
 import { DEFAULT_DIAGRAM_CODE, THEMES } from './constants';
 import { getCookie, setCookie } from './services/cookieService';
 
@@ -16,6 +17,8 @@ interface StateSnapshot {
 
 const App: React.FC = () => {
     const [view, setView] = useState<View>('editor');
+    const [tutorialTopic, setTutorialTopic] = useState<string>('flowchart');
+    const [tutorialSection, setTutorialSection] = useState<string | undefined>(undefined);
     const [theme, setTheme] = useState<ThemeName>('dark');
     const [diagrams, setDiagrams] = useState<Diagram[]>([]);
     const [currentDiagramId, setCurrentDiagramId] = useState<string | null>(null);
@@ -24,10 +27,31 @@ const App: React.FC = () => {
     const [history, setHistory] = useState<StateSnapshot[]>([]);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
     const [isDirty, setIsDirty] = useState(false);
+    const [messageLog, setMessageLog] = useState<LogEntry[]>([]);
 
     const showToast = useCallback((message: string, type: 'success' | 'info' | 'error' = 'success') => {
-        setToast({ message, type });
-        setTimeout(() => setToast(null), 3000);
+        if (type !== 'error') {
+            setToast({ message, type });
+            setTimeout(() => setToast(null), 3000);
+        }
+
+        const newLogEntry: LogEntry = {
+            message,
+            type,
+            timestamp: new Date().toISOString()
+        };
+        setMessageLog(prevLog => [...prevLog, newLogEntry]);
+    }, []);
+
+    const handleNavigate = useCallback((targetView: View, topic?: string, section?: string) => {
+        setView(targetView);
+        if (topic) {
+            setTutorialTopic(topic);
+        }
+        setTutorialSection(section);
+        if (targetView !== 'tutorial') {
+            setTutorialSection(undefined);
+        }
     }, []);
 
     useEffect(() => {
@@ -103,7 +127,7 @@ const App: React.FC = () => {
     const handleCodeFromOtherView = (newCode: string, sourceView: View) => {
         setCode(newCode);
         setHistory([]); // Clear history on manual code change from other views
-        setView(sourceView);
+        handleNavigate(sourceView);
         setIsDirty(true); // Code from other views is unsaved
     };
     
@@ -177,9 +201,15 @@ const App: React.FC = () => {
     const renderView = () => {
         switch (view) {
             case 'tutorial':
-                return <TutorialView onSelectCodeSnippet={handleCodeFromOtherView} />;
+                return <TutorialView 
+                    onSelectCodeSnippet={handleCodeFromOtherView} 
+                    topic={tutorialTopic} 
+                    section={tutorialSection}
+                    onNavigate={handleNavigate}
+                    theme={theme}
+                />;
             case 'visual-builder':
-                return <VisualBuilderView onGenerateCode={handleCodeFromOtherView} theme={theme} />;
+                return <VisualBuilderView onGenerateCode={handleCodeFromOtherView} theme={theme} showToast={showToast} />;
             case 'editor':
             default:
                 return (
@@ -191,6 +221,7 @@ const App: React.FC = () => {
                         onUndo={handleUndo}
                         canUndo={history.length > 0}
                         theme={theme}
+                        onNavigate={handleNavigate}
                     />
                 );
         }
@@ -200,12 +231,12 @@ const App: React.FC = () => {
         <div className="min-h-screen flex flex-col bg-gray-900 font-sans">
             <Header 
                 currentView={view} 
-                onNavigate={setView}
+                onNavigate={handleNavigate}
                 currentTheme={theme}
                 onThemeChange={handleThemeChange}
                 onToggleLibrary={() => setIsLibraryModalOpen(true)}
             />
-            <main className="flex-grow container mx-auto px-4 py-6">
+            <main className="flex-grow container mx-auto px-4 py-6 mb-10">
                 {renderView()}
             </main>
             <DiagramLibrary
@@ -219,6 +250,7 @@ const App: React.FC = () => {
                 onNewDiagram={handleNewDiagram}
                 onDeleteDiagram={handleDeleteDiagram}
             />
+            <StatusBar log={messageLog} />
             {toast && <Toast message={toast.message} type={toast.type} />}
         </div>
     );

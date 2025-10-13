@@ -5,7 +5,7 @@ import { Icon } from './Icon';
 
 interface HeaderProps {
     currentView: View;
-    onNavigate: (view: View) => void;
+    onNavigate: (view: View, topic?: string) => void;
     currentTheme: ThemeName;
     onThemeChange: (theme: ThemeName) => void;
     onToggleLibrary: () => void;
@@ -43,7 +43,7 @@ export const Header: React.FC<HeaderProps> = ({ currentView, onNavigate, current
                         <nav className="flex space-x-2">
                             <NavButton isActive={currentView === 'editor'} onClick={() => onNavigate('editor')} iconName="editor">Editor</NavButton>
                             <NavButton isActive={currentView === 'visual-builder'} onClick={() => onNavigate('visual-builder')} iconName="visual">Visual Builder</NavButton>
-                            <NavButton isActive={currentView === 'tutorial'} onClick={() => onNavigate('tutorial')} iconName="tutorial">Tutorial</NavButton>
+                            <NavButton isActive={currentView === 'tutorial'} onClick={() => onNavigate('tutorial', 'flowchart')} iconName="tutorial">Tutorial</NavButton>
                              <div className="border-l border-gray-600 mx-2"></div>
                             <NavButton onClick={onToggleLibrary} iconName="library">My Diagrams</NavButton>
                         </nav>
