@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import type { ThemeName } from '../types';
 
@@ -10,8 +11,16 @@ interface TutorialDiagramProps {
 export const TutorialDiagram: React.FC<TutorialDiagramProps> = ({ id, code, theme }) => {
     const [svg, setSvg] = useState<string>('');
     const [error, setError] = useState<string | null>(null);
+    const [isMounted, setIsMounted] = useState(false);
 
     useEffect(() => {
+        const timer = setTimeout(() => setIsMounted(true), 1);
+        return () => clearTimeout(timer);
+    }, []);
+
+    useEffect(() => {
+        if (!isMounted) return;
+
         const renderMermaid = async () => {
             if (!code.trim()) {
                 setSvg('');
@@ -32,7 +41,7 @@ export const TutorialDiagram: React.FC<TutorialDiagramProps> = ({ id, code, them
         // Use a small timeout to allow the DOM to update, preventing race conditions with mermaid.
         const timeoutId = setTimeout(renderMermaid, 50);
         return () => clearTimeout(timeoutId);
-    }, [id, code, theme]);
+    }, [id, code, theme, isMounted]);
 
     return (
         <div className="min-h-[50px]">

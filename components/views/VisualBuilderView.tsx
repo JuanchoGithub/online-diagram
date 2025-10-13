@@ -1,6 +1,10 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import type { ThemeName } from '../../types';
 import { Icon } from '../Icon';
+import { Button } from '../Button';
+import { ShapesPalette } from '../ShapesPalette';
+import type { Shape } from '../shapesData';
 
 interface VisualBuilderViewProps {
     code: string;
@@ -52,7 +56,6 @@ const formatEdgeId = (id: string): string => {
     return id;
 };
 
-
 const parseSvgForObjects = (svgContainer: HTMLDivElement | null): ParsedDiagramObjects => {
     if (!svgContainer) return { nodes: [], edges: [], subgraphs: [], others: [] };
 
@@ -64,7 +67,7 @@ const parseSvgForObjects = (svgContainer: HTMLDivElement | null): ParsedDiagramO
     const nodeLabelMap = new Map<string, string>();
 
     const getGenericLabel = (element: Element, defaultId: string): string => {
-        const textEl = element.querySelector('.label text, .label div, :scope > text, :scope > div');
+        const textEl = element.querySelector('.label text, .label div, :scope > text, :scope > div, .subgraph-title, .nodeLabel');
         return textEl?.textContent?.trim() || defaultId;
     };
 
@@ -138,7 +141,6 @@ const parseSvgForObjects = (svgContainer: HTMLDivElement | null): ParsedDiagramO
     return { nodes, edges, subgraphs, others };
 };
 
-
 const CollapsibleObjectList: React.FC<{
     title: string;
     objects: DiagramObject[];
@@ -199,12 +201,21 @@ const CollapsibleObjectList: React.FC<{
     );
 };
 
-
 export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCodeChange, theme, showToast }) => {
     const [svgContent, setSvgContent] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [diagramObjects, setDiagramObjects] = useState<ParsedDiagramObjects>({ nodes: [], edges: [], subgraphs: [], others: [] });
     const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [isShapesPaletteOpen, setIsShapesPaletteOpen] = useState(false);
+    const [linkingTargetId, setLinkingTargetId] = useState<string | null>(null);
+    const [linkingState, setLinkingState] = useState<{
+        startNodeId: string | null;
+        startPoint: { x: number; y: number } | null;
+        endPoint: { x: number; y: number } | null;
+    }>({ startNodeId: null, startPoint: null, endPoint: null });
+    const nodeCounterRef = useRef(1);
+    const dragStartPointRef = useRef<{ x: number; y: number; target: HTMLElement | null } | null>(null);
+    
     const svgContainerRef = useRef<HTMLDivElement>(null);
     const mermaidId = 'visual-builder-preview';
 
@@ -265,28 +276,164 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
         }
     }, [selectedId, svgContent]);
 
-    const handleSvgClick = (e: React.MouseEvent) => {
-        let target = e.target as HTMLElement;
-        if (target.id && target.id.startsWith('L_')) {
-            setSelectedId(target.id);
-            return;
+    useEffect(() => {
+        if (!svgContainerRef.current) return;
+
+        // Clear previous target highlight
+        const previousTarget = svgContainerRef.current.querySelector('.linking-target');
+        if (previousTarget) {
+            previousTarget.classList.remove('linking-target');
         }
-        const parentGroup = target.closest('g.subgraph, g.cluster, g.node, g.edge, g.actor, g.participant, g.class');
+
+        // Set new target highlight
+        if (linkingTargetId) {
+            const newTarget = svgContainerRef.current.querySelector(`#${CSS.escape(linkingTargetId)}`);
+            if (newTarget) {
+                newTarget.classList.add('linking-target');
+            }
+        }
+    }, [linkingTargetId, svgContent]);
+
+    const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+        dragStartPointRef.current = { x: e.clientX, y: e.clientY, target: e.target as HTMLElement };
+
+        const parentGroup = (e.target as HTMLElement).closest('g.subgraph, g.cluster, g.node');
         if (parentGroup && parentGroup.id) {
-            setSelectedId(parentGroup.id);
-        } else {
-            setSelectedId(null);
+            e.preventDefault();
+            const containerRect = e.currentTarget.getBoundingClientRect();
+            const nodeRect = parentGroup.getBoundingClientRect();
+            const startPoint = {
+                x: nodeRect.left + nodeRect.width / 2 - containerRect.left,
+                y: nodeRect.top + nodeRect.height / 2 - containerRect.top,
+            };
+
+            setLinkingState({
+                startNodeId: parentGroup.id,
+                startPoint: startPoint,
+                endPoint: startPoint,
+            });
         }
+    };
+
+    const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (!linkingState.startNodeId) return;
+
+        const containerRect = e.currentTarget.getBoundingClientRect();
+        const endPoint = { 
+            x: e.clientX - containerRect.left, 
+            y: e.clientY - containerRect.top 
+        };
+        setLinkingState(prev => (prev.startNodeId ? { ...prev, endPoint } : prev));
+
+        const endGroup = (e.target as HTMLElement).closest('g.subgraph, g.cluster, g.node');
+        if (endGroup && endGroup.id && endGroup.id !== linkingState.startNodeId) {
+            setLinkingTargetId(endGroup.id);
+        } else {
+            setLinkingTargetId(null);
+        }
+    };
+
+    const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (!dragStartPointRef.current) return;
+
+        const dragDistance = Math.sqrt(
+            Math.pow(e.clientX - dragStartPointRef.current.x, 2) +
+            Math.pow(e.clientY - dragStartPointRef.current.y, 2)
+        );
+
+        if (dragDistance > 5 && linkingState.startNodeId) {
+            // This was a drag operation for linking
+            const endGroup = (e.target as HTMLElement).closest('g.subgraph, g.cluster, g.node');
+            if (endGroup && endGroup.id && endGroup.id !== linkingState.startNodeId) {
+                const startId = formatNodeId(linkingState.startNodeId);
+                const endId = formatNodeId(endGroup.id);
+
+                if (startId && endId) {
+                    const updatedCode = `${code.trim()}\n  ${startId} --> ${endId}`;
+                    onCodeChange(updatedCode);
+                    showToast(`Linked ${startId} to ${endId}`, 'success');
+                }
+            }
+        } else {
+            // This was a click operation for selection
+            const target = dragStartPointRef.current.target;
+            if (target) {
+                const edgePath = target.closest('path[id^="L_"]');
+                if (edgePath && edgePath.id) {
+                    setSelectedId(edgePath.id);
+                } else {
+                    const parentGroup = target.closest('g.subgraph, g.cluster, g.node, g.edge, g.actor, g.participant, g.class');
+                    if (parentGroup && parentGroup.id) {
+                        setSelectedId(parentGroup.id);
+                    } else {
+                        setSelectedId(null);
+                    }
+                }
+            }
+        }
+
+        dragStartPointRef.current = null;
+        setLinkingState({ startNodeId: null, startPoint: null, endPoint: null });
+        setLinkingTargetId(null);
+    };
+    
+    const handleAddShape = (shape: Shape) => {
+        const newNodeId = `node${nodeCounterRef.current}`;
+        nodeCounterRef.current++;
+
+        let newNodeCode = '';
+        const nodeLabel = `"${shape.name}"`;
+
+        if (shape.type === 'classic') {
+            newNodeCode = `${newNodeId}${shape.syntax.replace('Text', nodeLabel)}`;
+        } else {
+            newNodeCode = `${newNodeId}@{ shape: ${shape.syntax}, label: ${nodeLabel} }`;
+        }
+
+        let updatedCode = code.trim();
+        const diagramType = updatedCode.split('\n')[0]?.trim();
+
+        if (!diagramType || (!diagramType.startsWith('graph') && !diagramType.startsWith('flowchart'))) {
+            updatedCode = `flowchart TD\n  ${newNodeCode}`;
+        } else {
+            updatedCode = `${updatedCode}\n  ${newNodeCode}`;
+        }
+        
+        onCodeChange(updatedCode);
+        setIsShapesPaletteOpen(false);
+        showToast(`Added ${shape.name} node.`, 'success');
     };
     
     return (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 h-[calc(100vh-8rem)]">
-            <main className="md:col-span-3 bg-gray-800 rounded-lg shadow-lg flex items-center justify-center relative overflow-hidden">
+            <main className="md:col-span-3 bg-gray-800 rounded-lg shadow-lg flex flex-col relative overflow-hidden">
+                 <div className="flex-shrink-0 bg-gray-700 p-2 px-4 flex justify-between items-center rounded-t-lg">
+                    <h3 className="text-sm font-semibold text-gray-300">Canvas</h3>
+                    <div className="flex items-center gap-2">
+                        <Button onClick={() => setIsShapesPaletteOpen(true)}>
+                            <Icon name="shapes" className="w-4 h-4 mr-1"/> Shapes
+                        </Button>
+                    </div>
+                </div>
+                
+                <ShapesPalette 
+                    isOpen={isShapesPaletteOpen}
+                    onClose={() => setIsShapesPaletteOpen(false)}
+                    onAddShape={handleAddShape}
+                    theme={theme}
+                />
+                
                 <style>{`
                     .selected-object {
                         outline: 3px solid #6366F1; /* Indigo-500 */
                         outline-offset: 4px;
                         border-radius: 4px;
+                    }
+                    .linking-target {
+                        outline: 3px solid #F59E0B; /* Amber-500 */
+                        outline-offset: 4px;
+                        border-radius: 4px;
+                        transition: outline 0.1s ease-in-out;
                     }
                     .selected-object path {
                         stroke: #6366F1 !important;
@@ -296,30 +443,58 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
                         max-width: 100%;
                         max-height: 100%;
                         height: auto;
+                        overflow: visible;
                     }
                     .visual-canvas .subgraph, .visual-canvas .cluster, .visual-canvas .node, .edge, .actor, .participant, .class, path[id^="L_"] {
                         cursor: pointer;
                     }
+                    .visual-canvas .subgraph, .visual-canvas .cluster, .visual-canvas .node {
+                        cursor: grab;
+                    }
                 `}</style>
                 <div 
                     ref={svgContainerRef}
-                    onClick={handleSvgClick}
-                    className="w-full h-full p-4 flex items-center justify-center visual-canvas"
+                    onMouseDown={handleMouseDown}
+                    onMouseMove={handleMouseMove}
+                    onMouseUp={handleMouseUp}
+                    className="w-full h-full p-4 visual-canvas flex-grow relative grid place-items-center overflow-hidden"
                 >
-                    {error && <div className="text-red-400 bg-red-900/50 p-4 rounded-md font-mono text-sm max-w-lg">{error}</div>}
-                    {!error && svgContent && <div className="w-full h-full" dangerouslySetInnerHTML={{ __html: svgContent }} />}
+                    {error && (
+                        <div className="text-red-400 bg-red-900/50 rounded-md font-mono text-sm max-w-lg relative z-0 text-center">
+                            {error}
+                        </div>
+                    )}
+                    {!error && svgContent && (
+                        <div className="max-w-full max-h-full relative z-0" dangerouslySetInnerHTML={{ __html: svgContent }} />
+                    )}
                     {!error && !svgContent && (
-                        <div className="text-center text-gray-500">
+                        <div className="text-center text-gray-500 relative z-0">
                             <Icon name="visual" className="w-16 h-16 mx-auto mb-4 text-gray-600" />
                             <p>Diagram preview will appear here.</p>
                             <p className="text-sm">Start by writing or loading a diagram in the Editor.</p>
                         </div>
                     )}
+
+                    {linkingState.startNodeId && linkingState.startPoint && linkingState.endPoint && (
+                        <svg overflow="visible" className="absolute top-0 left-0 w-full h-full pointer-events-none z-10">
+                            <line
+                                x1={linkingState.startPoint.x}
+                                y1={linkingState.startPoint.y}
+                                x2={linkingState.endPoint.x}
+                                y2={linkingState.endPoint.y}
+                                stroke="rgb(129 140 248)"
+                                strokeWidth="3"
+                                strokeDasharray="8 4"
+                                strokeLinecap="round"
+                            />
+                            <circle cx={linkingState.endPoint.x} cy={linkingState.endPoint.y} r="5" fill="rgb(129 140 248)" />
+                        </svg>
+                    )}
                 </div>
             </main>
              <aside className="md:col-span-1 bg-gray-800 rounded-lg p-4 overflow-y-auto">
                 <h3 className="text-base font-semibold text-white mb-4">Diagram Objects</h3>
-                <CollapsibleObjectList title="Subgraphs" objects={diagramObjects.subgraphs} icon="folder" selectedId={selectedId} onSelect={setSelectedId} />
+                <CollapsibleObjectList title="Subgraphs" objects={diagramObjects.subgraphs} icon="folder" selectedId={selectedId} onSelect={setSelectedId} showId={true} />
                 <CollapsibleObjectList title="Nodes" objects={diagramObjects.nodes} icon="square" selectedId={selectedId} onSelect={setSelectedId} showId={true} idFormatter={formatNodeId} />
                 <CollapsibleObjectList title="Links" objects={diagramObjects.edges} icon="link" selectedId={selectedId} onSelect={setSelectedId} showId={true} idFormatter={formatEdgeId} />
                 <CollapsibleObjectList title="Others" objects={diagramObjects.others} icon="git-commit" selectedId={selectedId} onSelect={setSelectedId} />

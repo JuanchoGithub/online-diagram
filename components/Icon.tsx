@@ -40,6 +40,7 @@ const ICONS: { [key: string]: React.ReactElement } = {
     link: <><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.72"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.72-1.72"/></>,
     'git-commit': <circle cx="12" cy="12" r="4" />,
     folder: <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />,
+    shapes: <path d="M12 1L3 7v10l9 6 9-6V7l-9-6zM3.5 8.5l8.5 5 8.5-5M12 21.5v-9.5" />,
 };
 
 export const Icon: React.FC<IconProps> = ({ name, className = 'h-6 w-6' }) => (
