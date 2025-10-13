@@ -21,6 +21,38 @@ interface ParsedDiagramObjects {
     others: DiagramObject[];
 }
 
+const formatNodeId = (id: string): string => {
+    const parts = id.split('-');
+    // Handles cases like 'flowchart-A-1', returning 'A'
+    // Also handles 'flowchart-my-node-1' returning 'my-node'
+    if (parts.length >= 3 && !isNaN(parseInt(parts[parts.length - 1], 10))) {
+        return parts.slice(1, parts.length - 1).join('-');
+    }
+    return id; // Fallback for other ID formats
+};
+
+const formatEdgeId = (id: string): string => {
+    const parts = id.split('_');
+    if (parts[0] === 'L' && parts.length >= 3) {
+        const source = parts[1];
+        const targetParts = parts.slice(2);
+        
+        // Check if the last part is a numeric index and remove it if there's more than one part
+        if (targetParts.length > 0 && /^\d+$/.test(targetParts[targetParts.length - 1])) {
+            // This handles cases like L_A_B_0 -> A -> B
+            // It will only pop if there is something before the number, to not break L_A_0
+            if (targetParts.length > 1) {
+                targetParts.pop();
+            }
+        }
+
+        const target = targetParts.join('_');
+        return `${source} -> ${target}`;
+    }
+    return id;
+};
+
+
 const parseSvgForObjects = (svgContainer: HTMLDivElement | null): ParsedDiagramObjects => {
     if (!svgContainer) return { nodes: [], edges: [], subgraphs: [], others: [] };
 
@@ -29,14 +61,26 @@ const parseSvgForObjects = (svgContainer: HTMLDivElement | null): ParsedDiagramO
     const subgraphs: DiagramObject[] = [];
     const others: DiagramObject[] = [];
     const processedIds = new Set<string>();
+    const nodeLabelMap = new Map<string, string>();
 
     const getGenericLabel = (element: Element, defaultId: string): string => {
-        // Find label text, preferring specific label containers but falling back to any text
         const textEl = element.querySelector('.label text, .label div, :scope > text, :scope > div');
         return textEl?.textContent?.trim() || defaultId;
     };
 
-    // Iterate over all elements with an ID
+    // First pass: build the node label map for resolving link names
+    svgContainer.querySelectorAll('g.node').forEach(el => {
+        const element = el as HTMLElement;
+        const id = element.id;
+        if (!id) return;
+        const coreId = formatNodeId(id);
+        const label = getGenericLabel(element, coreId);
+        if (label !== coreId) { // Only map "real" labels
+            nodeLabelMap.set(coreId, label);
+        }
+    });
+
+    // Second pass: categorize all elements and build final lists
     svgContainer.querySelectorAll('[id]').forEach(el => {
         const element = el as HTMLElement;
         const id = element.id;
@@ -44,18 +88,9 @@ const parseSvgForObjects = (svgContainer: HTMLDivElement | null): ParsedDiagramO
 
         let categorized = false;
 
-        // Only categorize certain types for groups
         if (element.tagName.toLowerCase() === 'g') {
-            // The order of these checks is important to prevent mis-categorization.
             if (element.matches('.subgraph, .cluster')) {
                 subgraphs.push({ id, label: getGenericLabel(element, id) });
-                categorized = true;
-            } else if (element.classList.contains('edgePath')) {
-                const labelId = `${id}-label`;
-                const labelGroup = svgContainer.querySelector(`g[id="${CSS.escape(labelId)}"]`);
-                const labelText = labelGroup?.textContent?.trim();
-                const label = labelText || id; // Default to the link ID if no text label exists
-                edges.push({ id, label });
                 categorized = true;
             } else if (element.matches('.node')) {
                 nodes.push({ id, label: getGenericLabel(element, id) });
@@ -66,13 +101,31 @@ const parseSvgForObjects = (svgContainer: HTMLDivElement | null): ParsedDiagramO
             }
         }
 
-        // Fallback for edges based on ID pattern
-        if (!categorized && id.startsWith('L-')) {
-            const labelId = `${id}-label`;
-            const labelGroup = svgContainer.querySelector(`g[id="${CSS.escape(labelId)}"]`);
-            const labelText = labelGroup?.textContent?.trim();
-            const label = labelText || id;
-            edges.push({ id, label });
+        if (!categorized && id.startsWith('L_')) {
+            const parts = id.split('_');
+            if (parts.length >= 3) {
+                const labelId = `edgeLabel_${id}`;
+                const labelGroup = svgContainer.querySelector(`#${CSS.escape(labelId)}`);
+                const edgeText = labelGroup?.textContent?.trim();
+
+                const sourceId = parts[1];
+                let targetParts = parts.slice(2);
+                if (targetParts.length > 1 && /^\d+$/.test(targetParts[targetParts.length - 1])) {
+                    targetParts.pop();
+                }
+                const targetId = targetParts.join('_');
+                
+                const sourceLabel = nodeLabelMap.get(sourceId) || sourceId;
+                const targetLabel = nodeLabelMap.get(targetId) || targetId;
+                
+                let displayLabel = `${sourceLabel} -> ${targetLabel}`;
+                if (edgeText) {
+                   displayLabel = `${sourceLabel} -- "${edgeText}" --> ${targetLabel}`;
+                }
+                edges.push({ id, label: displayLabel });
+            } else {
+                 edges.push({ id, label: formatEdgeId(id) });
+            }
             categorized = true;
         }
         
@@ -92,7 +145,9 @@ const CollapsibleObjectList: React.FC<{
     icon: string;
     selectedId: string | null;
     onSelect: (id: string) => void;
-}> = ({ title, objects, icon, selectedId, onSelect }) => {
+    showId?: boolean;
+    idFormatter?: (id: string) => string;
+}> = ({ title, objects, icon, selectedId, onSelect, showId = false, idFormatter = (id) => id }) => {
     const [isOpen, setIsOpen] = useState(true);
 
     return (
@@ -122,7 +177,14 @@ const CollapsibleObjectList: React.FC<{
                                     title={obj.label}
                                 >
                                     <Icon name={icon} className="w-4 h-4 flex-shrink-0" />
-                                    <span className="truncate">{obj.label}</span>
+                                    <div className="flex-grow min-w-0 overflow-x-auto whitespace-nowrap" style={{ scrollbarWidth: 'thin' }}>
+                                        <span>{obj.label}</span>
+                                        {showId && (
+                                            <span className="text-gray-400 font-mono text-xs ml-2">
+                                                ({idFormatter(obj.id)})
+                                            </span>
+                                        )}
+                                    </div>
                                 </button>
                             </li>
                         ))
@@ -188,25 +250,28 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
         if (!svgContainerRef.current) return;
         
         const previouslySelected = svgContainerRef.current.querySelector('.selected-object');
-        previouslySelected?.classList.remove('selected-object');
+        if (previouslySelected) previouslySelected.classList.remove('selected-object');
         
         if (selectedId) {
             const elementToSelect = svgContainerRef.current.querySelector(`#${CSS.escape(selectedId)}`);
-            elementToSelect?.classList.add('selected-object');
+            if (elementToSelect) elementToSelect.classList.add('selected-object');
 
             // Also select edge labels if the edge is selected
-            if (selectedId.startsWith('L-')) {
-                 const labelId = `${selectedId}-label`;
-                 const labelElement = svgContainerRef.current.querySelector(`g[id="${CSS.escape(labelId)}"]`);
-                 labelElement?.classList.add('selected-object');
+            if (selectedId.startsWith('L_')) {
+                 const labelId = `edgeLabel_${selectedId}`;
+                 const labelElement = svgContainerRef.current.querySelector(`#${CSS.escape(labelId)}`);
+                 if (labelElement) labelElement.classList.add('selected-object');
             }
         }
     }, [selectedId, svgContent]);
 
     const handleSvgClick = (e: React.MouseEvent) => {
         let target = e.target as HTMLElement;
-        const parentGroup = target.closest('g.subgraph, g.cluster, g.node, g.edge, g.actor, g.participant, g.class, g[id^="L-"]');
-
+        if (target.id && target.id.startsWith('L_')) {
+            setSelectedId(target.id);
+            return;
+        }
+        const parentGroup = target.closest('g.subgraph, g.cluster, g.node, g.edge, g.actor, g.participant, g.class');
         if (parentGroup && parentGroup.id) {
             setSelectedId(parentGroup.id);
         } else {
@@ -223,12 +288,16 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
                         outline-offset: 4px;
                         border-radius: 4px;
                     }
+                    .selected-object path {
+                        stroke: #6366F1 !important;
+                        stroke-width: 3px !important;
+                    }
                     .visual-canvas svg {
                         max-width: 100%;
                         max-height: 100%;
                         height: auto;
                     }
-                    .visual-canvas .subgraph, .visual-canvas .cluster, .visual-canvas .node, .edge, .actor, .participant, .class, g[id^="L-"] {
+                    .visual-canvas .subgraph, .visual-canvas .cluster, .visual-canvas .node, .edge, .actor, .participant, .class, path[id^="L_"] {
                         cursor: pointer;
                     }
                 `}</style>
@@ -251,8 +320,8 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
              <aside className="md:col-span-1 bg-gray-800 rounded-lg p-4 overflow-y-auto">
                 <h3 className="text-base font-semibold text-white mb-4">Diagram Objects</h3>
                 <CollapsibleObjectList title="Subgraphs" objects={diagramObjects.subgraphs} icon="folder" selectedId={selectedId} onSelect={setSelectedId} />
-                <CollapsibleObjectList title="Nodes" objects={diagramObjects.nodes} icon="square" selectedId={selectedId} onSelect={setSelectedId} />
-                <CollapsibleObjectList title="Links" objects={diagramObjects.edges} icon="link" selectedId={selectedId} onSelect={setSelectedId} />
+                <CollapsibleObjectList title="Nodes" objects={diagramObjects.nodes} icon="square" selectedId={selectedId} onSelect={setSelectedId} showId={true} idFormatter={formatNodeId} />
+                <CollapsibleObjectList title="Links" objects={diagramObjects.edges} icon="link" selectedId={selectedId} onSelect={setSelectedId} showId={true} idFormatter={formatEdgeId} />
                 <CollapsibleObjectList title="Others" objects={diagramObjects.others} icon="git-commit" selectedId={selectedId} onSelect={setSelectedId} />
             </aside>
         </div>
