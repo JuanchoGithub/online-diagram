@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import type { ThemeName, DiagramObject } from '../../types';
+import type { ThemeName, DiagramObject, ParsedDiagramObjects } from '../../types';
 import { Icon } from '../Icon';
 import { Button } from '../Button';
 import { ShapesPalette } from '../ShapesPalette';
 import type { Shape } from '../shapesData';
 import { MoveToSubgraphModal } from '../MoveToSubgraphModal';
-// FIX: Import getAllLinks and parseLinkLine to break circular dependency and remove 'require'.
-import { FormattingPanel, getAllLinks, parseLinkLine } from '../FormattingPanel';
+// FIX: Removed parseLinkLine from import to resolve incorrect function usage and prevent potential circular dependencies.
+import { FormattingPanel, getAllLinks } from '../FormattingPanel';
 
 interface VisualBuilderViewProps {
     code: string;
@@ -20,13 +20,6 @@ interface SelectedObject {
     type: 'node' | 'subgraph' | 'edge';
 }
 
-interface ParsedDiagramObjects {
-    nodes: DiagramObject[];
-    edges: DiagramObject[];
-    subgraphs: DiagramObject[];
-    others: DiagramObject[];
-}
-
 const formatNodeId = (id: string): string => {
     const parts = id.split('-');
     if (parts.length >= 3 && !isNaN(parseInt(parts[parts.length - 1], 10))) {
@@ -34,8 +27,6 @@ const formatNodeId = (id: string): string => {
     }
     return id;
 };
-
-// FIX: Moved getAllLinks to FormattingPanel.tsx to resolve circular dependency.
 
 const findLinkIndex = (code: string, selectedEdgeId: string): number => {
     if (!selectedEdgeId.startsWith('L_')) return -1;
@@ -146,7 +137,6 @@ const parseSvgForObjects = (svgContainer: HTMLDivElement | null): ParsedDiagramO
                 if (edgeText) {
                    displayLabel = `${sourceLabel} -- "${edgeText}" --> ${targetLabel}`;
                 }
-                // FIX: Added sourceId and targetId to edge DiagramObject. The type was updated in types.ts
                 edges.push({ id, label: displayLabel, sourceId, targetId });
             }
             categorized = true;
@@ -245,6 +235,105 @@ const TooltipButton: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & {
     </div>
 );
 
+// Helper function to find a node's definition string in the raw code.
+// It doesn't need to be perfect at parsing the label, just at finding the definition.
+const findNodeSyntaxInCode = (lines: string[], nodeId: string): string | null => {
+    // This regex is designed to find the node ID followed by one of the known definition syntaxes.
+    // It captures the entire definition part (e.g., `[My Label]`).
+    const fullDefRegex = new RegExp(
+        `\\b${nodeId}` +
+        `(` +
+            `\\[[^\\]]*?\\]|` +         // Square brackets: [content]
+            `\\(\\([^\\]]*?\\)\\)|` +   // Double circle: ((content))
+            `\\(\\[[^\\]]*?\\]\\)|` +   // Stadium: ([content])
+            `\\[\\[[^\\]]*?\\]\\]|` +   // Subroutine: [[content]]
+            `\\[\\([^\\]]*?\\)\\]|` +   // Cylinder: [(content)]
+            `\\{\\{[^\\]]*?\\}\\}|` +   // Hexagon: {{content}}
+            `\\{[^\\]]*?\\}|` +         // Rhombus: {content}
+            `\\([^\\]]*?\\)|` +         // Rounded: (content)
+            `>[^\\]]*?\\]|` +           // Asymmetric: >content]
+            `\\[/[^\\]]*?\\\\]|` +      // Trapezoids/Parallelograms
+            `\\[\\\\[^\\]]*?/]|` +
+            `\\[/[^\\]]*?/]|` +
+            `\\[\\\\[^\\]]*?\\\\]|` +
+            `@\\{[^\\}]*?\\}` +         // Advanced syntax: @{...}
+        `)`
+    );
+
+    for (const line of lines) {
+        const trimmedLine = line.trim();
+        const match = trimmedLine.match(fullDefRegex);
+        
+        // Ensure the match is for the node itself, not just a substring
+        if (match && (trimmedLine.startsWith(match[0]) || trimmedLine.includes(`--> ${match[0]}`))) {
+            return match[0];
+        }
+    }
+
+    // Fallback for id-only nodes (e.g., "A;") or just "A" on a line
+    const idOnlyRegex = new RegExp(`^\\s*${nodeId}\\s*(;.*|-->|---|$)`);
+    for (const line of lines) {
+        if (idOnlyRegex.test(line.trim())) {
+            return nodeId;
+        }
+    }
+
+    return null;
+};
+
+// Helper function to reconstruct a "perfect" definition string using trusted data.
+const reconstructDefinition = (nodeId: string, definitionFromCode: string, trustedLabel: string): string => {
+    // If the label is just the ID, the code definition is fine as is.
+    if (trustedLabel === nodeId) {
+        return definitionFromCode;
+    }
+
+    const quotedLabel = `"${trustedLabel}"`;
+
+    // Case 1: ID-only node was found, so we need to add standard brackets.
+    if (nodeId === definitionFromCode) {
+        return `${nodeId}[${quotedLabel}]`;
+    }
+    
+    // Case 2: Advanced syntax @{...}
+    if (definitionFromCode.startsWith('@{')) {
+        // This is complex; for now, we won't try to modify it to avoid breaking it.
+        // A future improvement could be to parse and replace the label property.
+        return `${nodeId}${definitionFromCode}`;
+    }
+
+    // Case 3: Classic syntax with brackets
+    // Extracts the container part of the syntax, e.g., "[]", "()", "{}"
+    const openSyntaxMatch = definitionFromCode.match(/^[(\[{>\/\\]+/);
+    const closeSyntaxMatch = definitionFromCode.match(/[)\]}\/\\]+$/);
+
+    if (openSyntaxMatch && closeSyntaxMatch) {
+        return `${nodeId}${openSyntaxMatch[0]}${quotedLabel}${closeSyntaxMatch[0]}`;
+    }
+
+    return definitionFromCode; // Fallback if reconstruction fails
+};
+
+// FIX: Added a dedicated helper to parse source and target from a link to fix incorrect usage of `parseLinkLine`.
+const parseLinkLineForSourceTarget = (line: string): { source: string; target: string } | null => {
+    const linkRegex = /^\s*([\w\d.-]+)\s*.*?(-->|---|--\.|==>|<-->|--o|o--o|--x|x--x)/;
+    const lineMatch = linkRegex.exec(line);
+
+    if (lineMatch) {
+        const source = lineMatch[1];
+        const arrow = lineMatch[2];
+        const afterArrow = line.substring(line.indexOf(arrow) + arrow.length);
+        
+        const targetMatch = afterArrow.match(/^\s*"?([\w\d.-]+)"?/);
+
+        if (targetMatch) {
+            const target = targetMatch[1];
+            return { source, target };
+        }
+    }
+    return null;
+};
+
 export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCodeChange, theme, showToast }) => {
     const [svgContent, setSvgContent] = useState('');
     const [error, setError] = useState<string | null>(null);
@@ -322,56 +411,136 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
 
         if (type === 'node') {
             const nodeId = formatNodeId(id);
-            const newLines = lines.map(line => {
+            const linesToDelete = new Set<number>();
+            const neighborNodes = new Set<string>();
+
+            // --- PRE-DELETE ANALYSIS: Build a map of "perfect" definitions using trusted labels from UI state ---
+            const preDeleteBestDefs = new Map<string, string>();
+            const allObjects = [...diagramObjects.nodes, ...diagramObjects.subgraphs];
+            for (const obj of allObjects) {
+                const currentId = formatNodeId(obj.id);
+                const trustedLabel = obj.label;
+                const defFromCode = findNodeSyntaxInCode(lines, currentId);
+                
+                if (defFromCode) {
+                    const bestDef = reconstructDefinition(currentId, defFromCode, trustedLabel);
+                    preDeleteBestDefs.set(currentId, bestDef);
+                } else {
+                    preDeleteBestDefs.set(currentId, currentId); // Fallback
+                }
+            }
+            showToast(`DEBUG: --- PRE-DELETE ANALYSIS (Reconstructed) ---`, 'info');
+            for (const [nodeId, def] of preDeleteBestDefs.entries()) {
+                showToast(`DEBUG: Pre-delete best def for '${nodeId}': ${def}`, 'info');
+            }
+            showToast(`DEBUG: --- STARTING DELETE FOR '${nodeId}' ---`, 'info');
+            // --- END PRE-DELETE ANALYSIS ---
+
+
+            // Pass 1: Identify lines to delete and find neighbors
+            showToast(`DEBUG: Pass 1: Identifying lines and neighbors...`, 'info');
+            lines.forEach((line, index) => {
                 const trimmed = line.trim();
-                const indentation = line.match(/^\s*/)?.[0] || '';
+                const wordBoundaryNodeRegex = new RegExp(`\\b${nodeId}\\b`);
 
-                // Define patterns for the node itself, other nodes, and link arrows
-                const selfNodePattern = `${nodeId}\\b(?:(?:\\[[^\\]]*\\])|(?:\\([^\\)]*\\))|(?:\\{[^\\}]*\\})|(?:@\\{[^\\}]*\\}))?`;
-                const otherNodePattern = `([\\w\\d.-]+\\b(?:(?:\\[[^\\]]*\\])|(?:\\([^\\)]*\\))|(?:\\{[^\\}]*\\})|(?:@\\{[^\\}]*\\}))?)`;
-                const linkArrowPattern = `\\s*?(?:--(?:"[^"]*")?-->|-->|---|--\\.|==>|<-->|--o|o--o|--x|x--x|~~~)\\s*?`;
-
-                // Pattern for a standalone definition of the node to be deleted
-                const standaloneDefRegex = new RegExp(`^${selfNodePattern}\\s*;?\\s*$`);
-                if (standaloneDefRegex.test(trimmed)) {
-                    return null; // Mark line for deletion
+                if (!wordBoundaryNodeRegex.test(trimmed)) {
+                    return;
                 }
 
-                // Pattern for a style definition of the node to be deleted
-                const styleRegex = new RegExp(`^\\s*(style|class)\\s+${nodeId}\\b`);
-                if (styleRegex.test(trimmed)) {
-                    return null; // Mark line for deletion
+                let shouldDelete = false;
+                const linkArrowRegex = /(?:--.*?-->|-->|---|~~~|==>|<-->|--o|o--o|--x|x--x|-\.->)/;
+                if (linkArrowRegex.test(trimmed)) {
+                    const linkParts = parseLinkLineForSourceTarget(trimmed);
+                    if (linkParts) {
+                        const { source, target } = linkParts;
+                        if (source === nodeId || target === nodeId) {
+                            shouldDelete = true;
+                            if (source && source !== nodeId) neighborNodes.add(source);
+                            if (target && target !== nodeId) neighborNodes.add(target);
+                        }
+                    }
+                } else if (new RegExp(`^\\s*${nodeId}\\b`).test(trimmed)) {
+                    shouldDelete = true;
+                } else if (new RegExp(`^\\s*style\\s+${nodeId}\\b`).test(trimmed)) {
+                    shouldDelete = true;
+                } else if (trimmed.startsWith('class ')) {
+                    const classApplyRegex = /^\s*class\s+([\w\d\s,.-]+?)\s+([\w\d.-]+)\s*;?\s*$/;
+                    const match = trimmed.match(classApplyRegex);
+                    if (match) {
+                        const nodePart = match[1];
+                        const nodes = nodePart.split(',').map(n => n.trim());
+                        if (nodes.includes(nodeId)) {
+                            const remainingNodes = nodes.filter(n => n !== nodeId);
+                            if (remainingNodes.length > 0) {
+                                lines[index] = line.replace(nodePart, remainingNodes.join(', '));
+                            } else {
+                                shouldDelete = true;
+                            }
+                        }
+                    }
                 }
 
-                // Pattern for a link where the node is the target (e.g., C --> A)
-                const targetLinkRegex = new RegExp(`^${otherNodePattern}${linkArrowPattern}${selfNodePattern}\\s*;?\\s*$`);
-                const targetMatch = trimmed.match(targetLinkRegex);
-                if (targetMatch) {
-                     // Preserve the source node, but remove the link and the target node
-                    return `${indentation}${targetMatch[1]}`;
+                if (shouldDelete) {
+                    linesToDelete.add(index);
+                    showToast(`DEBUG: - Marking line ${index + 1} for deletion: "${line.trim()}"`, 'info');
                 }
+            });
 
-                // Pattern for a link where the node is the source (e.g., A --> B)
-                const sourceLinkRegex = new RegExp(`^${selfNodePattern}${linkArrowPattern}${otherNodePattern}\\s*;?\\s*$`);
-                const sourceMatch = trimmed.match(sourceLinkRegex);
-                if (sourceMatch) {
-                    // Preserve the target node, but remove the source node and the link
-                    return `${indentation}${sourceMatch[1]}`;
+            // Pass 2: Analyze neighbors and decide which definitions to preserve
+            showToast(`DEBUG: Pass 2: Analyzing ${neighborNodes.size} neighbors...`, 'info');
+            const definitionsToAdd = new Set<string>();
+            const intermediateLines = lines.filter((_, i) => !linesToDelete.has(i));
+
+            for (const neighborId of neighborNodes) {
+                showToast(`DEBUG: Analyzing neighbor '${neighborId}'`, 'info');
+                const bestDefInOriginal = preDeleteBestDefs.get(neighborId) || neighborId;
+                showToast(`DEBUG: - Original best def: ${bestDefInOriginal}`, 'info');
+
+                const bestDefInIntermediate = findNodeSyntaxInCode(intermediateLines, neighborId);
+                showToast(`DEBUG: - Intermediate best def: ${bestDefInIntermediate || 'null'}`, 'info');
+
+                if (bestDefInOriginal && (!bestDefInIntermediate || bestDefInIntermediate.length < bestDefInOriginal.length)) {
+                    definitionsToAdd.add(bestDefInOriginal);
+                    showToast(`DEBUG:   - DECISION: Preserve definition for '${neighborId}': "${bestDefInOriginal}"`, 'info');
+                } else {
+                     showToast(`DEBUG:   - DECISION: No preservation needed for '${neighborId}'`, 'info');
                 }
+            }
 
-                // If no patterns match, keep the line as is
-                return line;
-            }).filter(line => line !== null) as string[];
+            // Pass 3: Reconstruct the code
+            showToast(`DEBUG: Pass 3: Reconstructing code...`, 'info');
+            let finalLines = intermediateLines;
+            if (definitionsToAdd.size > 0) {
+                let insertIndex = finalLines.findIndex(line => line.trim().startsWith('graph') || line.trim().startsWith('flowchart'));
+                insertIndex = (insertIndex === -1) ? 0 : insertIndex + 1;
 
-            finalCode = newLines.join('\n');
+                while (insertIndex < finalLines.length && (finalLines[insertIndex].trim() === '' || finalLines[insertIndex].trim().startsWith('direction'))) {
+                    insertIndex++;
+                }
+                
+                const indentation = '    ';
+                const definitionsArray = Array.from(definitionsToAdd).map(def => `${indentation}${def}`);
+                finalLines.splice(insertIndex, 0, ...definitionsArray);
+                showToast(`DEBUG: - Inserting ${definitionsArray.length} preserved definitions at line ${insertIndex + 1}`, 'info');
 
+            } else {
+                showToast(`DEBUG: - No definitions to preserve.`, 'info');
+            }
+
+            finalCode = finalLines.join('\n');
+        
         } else if (type === 'edge') {
             const linkIndex = findLinkIndex(finalCode, id);
+
             if (linkIndex !== -1) {
-                const linkToDel = getAllLinks(finalCode)[linkIndex];
-                lines = lines.filter((line, index) => index !== linkToDel.lineIndex);
-                finalCode = lines.join('\n');
+                const allLinks = getAllLinks(finalCode);
+                if (linkIndex < allLinks.length) {
+                    const linkToDel = allLinks[linkIndex];
+                    lines = lines.filter((_, index) => index !== linkToDel.lineIndex);
+                    finalCode = lines.join('\n');
+                }
             }
+
         } else if (type === 'subgraph') {
              let startIndex = -1;
              const subgraphRegex = new RegExp(`^(\\s*)subgraph\\s+${id}\\b`);
@@ -400,11 +569,11 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
                  }
              }
         }
-
+    
         onCodeChange(finalCode.replace(/\n\n+/g, '\n').trim());
-        showToast(`${type.charAt(0).toUpperCase() + type.slice(1)} deleted.`, 'success');
+        showToast(`${type.charAt(0).toUpperCase() + type.slice(1)} '${formatNodeId(id)}' deleted.`, 'success');
         setSelectedObject(null);
-    }, [selectedObject, code, onCodeChange, showToast]);
+    }, [selectedObject, code, onCodeChange, showToast, diagramObjects]);
     
     const handleDuplicateSelectedObject = useCallback(() => {
         if (!selectedObject || selectedObject.type === 'edge') return;
@@ -514,7 +683,6 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
             lines.splice(nodeLineIndex, 1);
             
             const firstLineIsGraph = lines.length > 0 && (lines[0].trim().startsWith('graph') || lines[0].trim().startsWith('flowchart'));
-            // FIX: The second argument to splice must be a number (the delete count), not a string. To insert, delete count should be 0.
             lines.splice(firstLineIsGraph ? 1 : 0, 0, `    ${nodeLine}`);
 
             onCodeChange(lines.join('\n'));
@@ -599,7 +767,6 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
         const oldLinkPart = buildLinkPart(oldArrow, oldText);
         const newLinkPart = buildLinkPart(newArrow, newText);
         
-        // This is a simple but fragile replacement. A more robust solution would be a proper parser.
         const sourcePart = originalLine.substring(0, originalLine.indexOf(oldLinkPart));
         const targetPart = originalLine.substring(originalLine.indexOf(oldLinkPart) + oldLinkPart.length);
 
@@ -617,12 +784,11 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
 
         const allLinks = getAllLinks(code);
         const linkToUpdate = allLinks[linkIndex];
-        const { source, target, line, lineIndex } = linkToUpdate;
+        const { source, target, lineIndex } = linkToUpdate;
         
         const lines = code.split('\n');
         const originalLine = lines[lineIndex];
         
-        // This is a simple regex swap, it might not cover all edge cases
         const linkPartsRegex = new RegExp(`(^[\\s\\w\\d.-]+(?:\\s*\\[[^\\]]*\\]|\\s*\\([^\\)]*\\)|\\s*\\{[^\\}]*\\})?)(\\s*.*\\s*)(${target})`);
         
         const match = originalLine.trim().match(linkPartsRegex);
@@ -747,7 +913,6 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
                     setDiagramObjects(objects);
 
                     if (pendingSelection) {
-                        // FIX: Added optional chaining and checks since sourceId/targetId are optional.
                         const newLink = objects.edges.find(e => e.sourceId === pendingSelection.sourceId && e.targetId === pendingSelection.targetId);
                         if (newLink) {
                             setSelectedObject({ id: newLink.id, type: 'edge' });

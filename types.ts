@@ -24,9 +24,15 @@ export interface LogEntry {
 export interface DiagramObject {
     id: string;
     label: string;
-    // FIX: Add optional sourceId and targetId for edge objects.
     sourceId?: string;
     targetId?: string;
+}
+
+export interface ParsedDiagramObjects {
+    nodes: DiagramObject[];
+    edges: DiagramObject[];
+    subgraphs: DiagramObject[];
+    others: DiagramObject[];
 }
 
 export interface SyntaxExplanation {
