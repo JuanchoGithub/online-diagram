@@ -13,12 +13,13 @@ export const sequenceSyntax: DiagramSyntax = {
             },
             category: 'Declaration',
         },
+        // PARTICIPANTS
         {
             matcher: /participant/,
             explanation: {
                 title: 'Participant',
-                description: 'Defines a participant in the sequence, shown as a box. You can use `as` to create a shorter alias.',
-                example: 'participant User\nparticipant System as S'
+                description: 'Defines a participant in the sequence, shown as a box. Participants are rendered in their order of appearance. You can use `as` to create a shorter alias.',
+                example: 'participant User\nparticipant "System A" as SA'
             },
             category: 'Participants',
         },
@@ -32,41 +33,70 @@ export const sequenceSyntax: DiagramSyntax = {
             category: 'Participants',
         },
         {
-            matcher: /->>/,
+            matcher: /@\{.*\}/,
             explanation: {
-                title: 'Solid Line Message',
-                description: 'Represents a synchronous message from one participant to another, shown with a solid line and a solid arrowhead.',
-                example: 'Alice->>Bob: Hello!'
+                title: 'Special Participant Types',
+                description: 'Uses JSON configuration to define a participant with a special shape like `boundary`, `control`, `entity`, `database`, `collections`, or `queue`.',
+                example: 'participant DB @{ type: "database" }'
+            },
+            category: 'Participants',
+        },
+        {
+            matcher: /\b(create|destroy)\b/,
+            explanation: {
+                title: 'Participant Creation/Destruction',
+                description: 'Dynamically creates or destroys a participant during the sequence flow. `create` must come before a message to the new participant, and `destroy` must come before a message from the participant being destroyed.',
+                example: 'create participant Carl\nAlice->>Carl: Hi!\ndestroy Carl\nCarl->>Alice: Goodbye!'
+            },
+            category: 'Participants'
+        },
+        // MESSAGES
+        {
+            matcher: /->>|-->>/,
+            explanation: {
+                title: 'Message (Solid/Dashed Arrow)',
+                description: 'Represents a message from one participant to another. `->>` is a solid line (often for synchronous calls) and `-->>` is a dashed line (often for replies or asynchronous calls).',
+                example: 'Alice->>Bob: Request\nBob-->>Alice: Response'
             },
             category: 'Messages',
         },
         {
-            matcher: /-->>/,
+            matcher: /->|-\)/,
             explanation: {
-                title: 'Dashed Line Message',
-                description: 'Represents an asynchronous message or reply, shown with a dashed line and a solid arrowhead.',
-                example: 'Bob-->>Alice: How are you?'
+                title: 'Message (Open Arrow)',
+                description: 'Represents an asynchronous message where the sender does not wait for a response. `->` is a solid line and `-)` is a dotted line.',
+                example: 'Alice->Bob: FYI, this event occurred.'
             },
             category: 'Messages',
         },
         {
-            matcher: /->/,
+            matcher: /<<->>|<<-->>/,
             explanation: {
-                title: 'Solid Line Open Arrow',
-                description: 'Represents a message with an open arrowhead, often used for asynchronous calls.',
-                example: 'Alice->Bob: A one-way message.'
+                title: 'Bi-Directional Message',
+                description: 'Represents a message with arrowheads on both ends, indicating a two-way synchronous action. `<<->>` is solid and `<<-->>` is dashed.',
+                example: 'Alice<<->>Bob: Syncing data'
             },
             category: 'Messages',
         },
         {
-            matcher: /--\)/,
+            matcher: /-x|--x/,
             explanation: {
-                title: 'Dashed Line Open Arrow',
-                description: 'Represents a message with an open arrowhead on a dashed line.',
-                example: 'Alice--)Bob: Another one-way message.'
+                title: 'Lost/Error Message',
+                description: 'Represents a message that does not reach its destination, indicated by a cross at the end. `-x` is a solid line and `--x` is a dashed line.',
+                example: 'Alice-xBob: Lost message'
             },
             category: 'Messages',
         },
+         {
+            matcher: /-->|->/,
+            explanation: {
+                title: 'Message (No Arrowhead)',
+                description: 'Represents a simple connection without a specific direction indicated by an arrowhead. `-->` is a dashed line and `->` is a solid line.',
+                example: 'Alice-->Bob: A comment about connection'
+            },
+            category: 'Messages',
+        },
+        // ACTIVATIONS
         {
             matcher: /\+\s*$/,
             explanation: {
@@ -80,20 +110,31 @@ export const sequenceSyntax: DiagramSyntax = {
             matcher: /-\s*$/,
             explanation: {
                 title: 'Activation End',
-                description: 'Deactivates a participant, ending the action block on its lifeline. Use a `-` at the end of a message line.',
+                description: 'Deactivates a participant, ending the action block on its lifeline. Use a `-` at theend of a message line.',
                 example: 'API-->>-User: Return data'
             },
             category: 'Activations',
         },
         {
+            matcher: /\b(activate|deactivate)\b/,
+            explanation: {
+                title: 'Explicit Activation',
+                description: 'Explicitly activates or deactivates a participant on a new line. This is an alternative to the +/- shortcuts.',
+                example: 'activate Bob\nAlice->>Bob: Process this\ndeactivate Bob'
+            },
+            category: 'Activations',
+        },
+        // ANNOTATIONS
+        {
             matcher: /Note/,
             explanation: {
                 title: 'Note',
                 description: 'Adds an explanatory note to the diagram. It can be placed `left of`, `right of`, or `over` one or more participants.',
-                example: 'Note right of Alice: This is a note.'
+                example: 'Note right of Alice: This is a note.\nNote over Alice,Bob: An interaction'
             },
             category: 'Annotations',
         },
+        // FRAGMENTS
         {
             matcher: /\bloop\b/,
             explanation: {
@@ -131,11 +172,58 @@ export const sequenceSyntax: DiagramSyntax = {
             category: 'Fragments',
         },
         {
+            matcher: /\bcritical\b/,
+            explanation: {
+                title: 'Critical Region Block',
+                description: 'Indicates a critical action that must be performed atomically. It can have optional paths using the `option` keyword for handling different circumstances.',
+                example: 'critical DB Transaction\n    API->>DB: UPDATE records\noption Rollback\n    DB->>API: Failure\nend'
+            },
+            category: 'Fragments'
+        },
+        {
+            matcher: /\bbreak\b/,
+            explanation: {
+                title: 'Break Block',
+                description: 'Indicates a break in the sequence flow, often used to model exceptions or interruptions.',
+                example: 'loop Processing items\n    break If error occurs\n        API->>Client: Send error\n    end\nend'
+            },
+            category: 'Fragments'
+        },
+        // STRUCTURE & STYLING
+        {
+            matcher: /\bbox\b/,
+            explanation: {
+                title: 'Box Grouping',
+                description: 'Groups multiple participants together under a colored box with a descriptive title.',
+                example: 'box Purple "Backend Services"\n    participant API\n    participant DB\nend'
+            },
+            category: 'Structure',
+        },
+        {
+            matcher: /\brect\b/,
+            explanation: {
+                title: 'Background Highlighting',
+                description: 'Draws a colored rectangle in the background of a part of the sequence to highlight a specific flow or section.',
+                example: 'rect rgb(200, 220, 255)\n    Alice->>Bob: Important flow\nend'
+            },
+            category: 'Structure',
+        },
+        // GENERAL
+        {
             matcher: /autonumber/,
             explanation: {
                 title: 'Autonumber',
                 description: 'Automatically numbers each message in the diagram, making it easier to follow the sequence of events.',
                 example: 'autonumber'
+            },
+            category: 'General',
+        },
+        {
+            matcher: /link/,
+            explanation: {
+                title: 'Actor Link',
+                description: 'Adds a clickable link to a participant, which appears as a popup menu. Useful for linking to external documentation or dashboards.',
+                example: 'link Alice: Dashboard @ https://.../dashboard'
             },
             category: 'General',
         }

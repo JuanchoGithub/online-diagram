@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/Header';
 import { EditorView } from './components/views/EditorView';
 import { TutorialView } from './components/views/TutorialView';
-import { VisualBuilderView } from './components/views/VisualBuilderView';
+import { VisualBuilderView } from './components/visual-builder/VisualBuilderView';
 import { DiagramLibrary } from './components/DiagramLibrary';
 import { Toast } from './components/Toast';
 import { StatusBar } from './components/StatusBar';
