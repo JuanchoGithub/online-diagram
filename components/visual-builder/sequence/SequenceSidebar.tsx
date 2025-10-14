@@ -1,12 +1,7 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { CollapsibleObjectList } from '../shared/CollapsibleObjectList';
 import { SequenceFormattingPanel } from './SequenceFormattingPanel';
-import { ParsedSequenceObjects, Participant, Message } from './helpers';
-
-export interface SelectedObject {
-    id: string;
-    type: 'participant' | 'message';
-}
+import { ParsedSequenceObjects, Participant, Message, SelectedObject } from './helpers';
 
 interface SequenceSidebarProps {
     sidebarSize: number;
@@ -17,6 +12,12 @@ interface SequenceSidebarProps {
     diagramObjects: ParsedSequenceObjects;
     onDeleteObject: () => void;
 }
+
+const participantIconMap: Record<string, string> = {
+    actor: 'user',
+    database: 'save',
+};
+
 
 export const SequenceSidebar: React.FC<SequenceSidebarProps> = (props) => {
     const { 
@@ -38,13 +39,26 @@ export const SequenceSidebar: React.FC<SequenceSidebarProps> = (props) => {
         setIsVerticalResizing(true);
     }, []);
     
-    const handleSelectObject = (id: string, type: SelectedObject['type'] | 'other') => {
+    const handleSelectObject = (id: string, type: string) => {
         if (type === 'message' || type === 'participant') {
-            setSelectedObject({ id, type });
+            setSelectedObject({ id, type: type as SelectedObject['type'] });
         } else {
             setSelectedObject(null);
         }
     };
+
+    const participantsForList = useMemo(() => {
+        return diagramObjects.participants.map(p => {
+            const icon = participantIconMap[p.type];
+            const isSpecial = !['participant', 'actor'].includes(p.type);
+            
+            return {
+                ...p,
+                label: isSpecial ? `${p.label} (${p.type})` : p.label,
+                icon: icon, // will be undefined for some, falling back to default
+            };
+        });
+    }, [diagramObjects.participants]);
 
     React.useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
@@ -96,7 +110,7 @@ export const SequenceSidebar: React.FC<SequenceSidebarProps> = (props) => {
                 style={{ height: selectedObject ? `${sidebarVerticalSplit}%` : '100%', flexShrink: 1, minHeight: 0 }}
             >
                 <h3 className="text-base font-semibold text-white mb-4">Diagram Objects</h3>
-                <CollapsibleObjectList title="Participants" objects={diagramObjects.participants} icon="user" selectedId={selectedObject?.id ?? null} onSelect={handleSelectObject} type="participant" />
+                <CollapsibleObjectList title="Participants" objects={participantsForList} icon="square" selectedId={selectedObject?.id ?? null} onSelect={handleSelectObject} type="participant" />
                 <CollapsibleObjectList title="Messages" objects={diagramObjects.messages} icon="link" selectedId={selectedObject?.id ?? null} onSelect={handleSelectObject} type="message" />
             </div>
             

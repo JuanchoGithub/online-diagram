@@ -1,3 +1,7 @@
+export interface SelectedObject {
+    id: string;
+    type: 'participant' | 'message';
+}
 
 export interface Participant {
     id: string; // "participant-{alias}" or "actor-{alias}"
@@ -88,30 +92,35 @@ export const parseSvgForObjects = (svgContainer: HTMLDivElement, code: string): 
     const participantsFromCode = getParticipantDetailsFromCode(code);
     const messagesFromCode = getMessageDetailsFromCode(code);
 
-    participantsFromCode.forEach(p => {
-        // Mermaid uses a `data-actor` attribute for actors, and the text content for participants
-        const el = svgContainer.querySelector(`[data-actor="${p.alias}"]`);
-        if (el) {
-            el.setAttribute('data-id', p.id);
-        } else {
-             const textElements = Array.from(svgContainer.querySelectorAll('.participant text'));
-             const participantTextEl = textElements.find(t => t.textContent?.trim() === p.label);
-             const participantG = participantTextEl?.closest('g.participant');
-             if (participantG) {
-                participantG.setAttribute('data-id', p.id);
-             }
+    // Use render order to identify participants and set data-id on the group element.
+    const participantGroups = svgContainer.querySelectorAll('.participants > g.actor'); // Mermaid uses g.actor for both participants and actors.
+    participantsFromCode.forEach((p, index) => {
+        const participantGroup = participantGroups[index];
+        if (participantGroup) {
+            participantGroup.setAttribute('data-id', p.id);
         }
     });
 
-    // Messages are identified by their sequential render order in the SVG
+    // Use modern message group IDs where available, with a fallback.
     messagesFromCode.forEach((m, index) => {
-        const messagePath = svgContainer.querySelector(`#arrow-line-${index}`);
-        const messageLabel = svgContainer.querySelector(`#arrow-label-${index}`);
-        const messageGroup = messagePath?.parentElement;
+        // Mermaid 10+ uses a more stable ID scheme for message groups.
+        const messageGroup = svgContainer.querySelector(`#message-${index}`);
+        if (messageGroup) {
+            messageGroup.setAttribute('data-id', m.id);
+            // Also tag children to ensure click is caught regardless of what part of the message is clicked.
+            messageGroup.querySelectorAll('path, text, rect').forEach(child => {
+                child.setAttribute('data-id', m.id);
+            });
+        } else {
+            // Fallback for older Mermaid versions that use sequential line/label IDs.
+            const messagePath = svgContainer.querySelector(`#arrow-line-${index}`);
+            const messageLabel = svgContainer.querySelector(`#arrow-label-${index}`);
+            const oldMessageGroup = messagePath?.parentElement;
 
-        if(messageGroup) messageGroup.setAttribute('data-id', m.id);
-        if(messagePath) messagePath.setAttribute('data-id', m.id);
-        if(messageLabel) messageLabel.setAttribute('data-id', m.id);
+            if (oldMessageGroup) oldMessageGroup.setAttribute('data-id', m.id);
+            if (messagePath) messagePath.setAttribute('data-id', m.id);
+            if (messageLabel) messageLabel.setAttribute('data-id', m.id);
+        }
     });
 
     return {
@@ -170,9 +179,20 @@ export const updateParticipant = (code: string, alias: string, updates: Partial<
     const indentation = oldLine.match(/^\s*/)?.[0] || '';
 
     if (isSpecialType) {
-        newLine = `${indentation}${typeKeyword} "${newLabel}" as ${alias} @{ type: "${newType}" }`;
+        // For special types, the `as` keyword is invalid.
+        // The identifier IS the label. We must use the alias as the identifier
+        // to keep message arrows pointing to it. The descriptive label is lost.
+        // If the alias has spaces, it must be quoted.
+        const identifier = alias.includes(' ') ? `"${alias}"` : alias;
+        newLine = `${indentation}${typeKeyword} ${identifier}@{ type: "${newType}" }`;
     } else {
-        newLine = `${indentation}${typeKeyword} "${newLabel}" as ${alias}`;
+        // For standard types, use `label as alias` if they differ, otherwise just use the label.
+        const labelNeedsQuotes = newLabel.includes(' ');
+        if (newLabel === alias) {
+            newLine = `${indentation}${typeKeyword} ${labelNeedsQuotes ? `"${newLabel}"` : newLabel}`;
+        } else {
+            newLine = `${indentation}${typeKeyword} "${newLabel}" as ${alias}`;
+        }
     }
 
     lines[lineIndex] = newLine;
@@ -193,7 +213,7 @@ export const updateMessage = (code: string, lineIndex: number, updates: Partial<
     const newText = updates.text ?? messageToUpdate.text;
 
     const indentation = oldLine.match(/^\s*/)?.[0] || '';
-    const newLine = `${indentation}${messageToUpdate.from}${newArrow}${messageToUpdate.to}: ${newText}`;
+    const newLine = `${indentation}${messageToUpdate.from} ${newArrow} ${messageToUpdate.to}: ${newText}`;
     
     lines[lineIndex] = newLine;
     return lines.join('\n');

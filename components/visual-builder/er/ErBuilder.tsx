@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { ThemeName } from '../../../types';
 import { Icon } from '../../Icon';
 import { Button } from '../../Button';
-import { ErSidebar, SelectedObject } from './ErSidebar';
+// Fix: Import `SelectedObject` type from `./helpers` instead of from `ErSidebar` which doesn't export it.
+import { ErSidebar } from './ErSidebar';
 import { TooltipButton } from '../shared/TooltipButton';
 import { 
     parseSvgForObjects,
@@ -10,6 +11,7 @@ import {
     addEntity,
     deleteEntity,
     deleteRelationship,
+    type SelectedObject,
 } from './helpers';
 import { ConfirmationModal } from '../../ConfirmationModal';
 

@@ -1,5 +1,10 @@
 import type { DiagramObject, ParsedDiagramObjects } from '../../../types';
 
+export interface SelectedObject {
+    id: string;
+    type: 'node' | 'subgraph' | 'edge';
+}
+
 export const formatNodeId = (id: string): string => {
     const parts = id.split('-');
     if (parts.length >= 3 && !isNaN(parseInt(parts[parts.length - 1], 10))) {

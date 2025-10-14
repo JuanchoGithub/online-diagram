@@ -1,12 +1,7 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { CollapsibleObjectList } from '../shared/CollapsibleObjectList';
 import { ErFormattingPanel } from './ErFormattingPanel';
-import { ParsedErObjects, ErEntity, ErRelationship } from './helpers';
-
-export interface SelectedObject {
-    id: string;
-    type: 'entity' | 'relationship';
-}
+import { ParsedErObjects, ErEntity, ErRelationship, SelectedObject } from './helpers';
 
 interface ErSidebarProps {
     sidebarSize: number;
@@ -38,9 +33,9 @@ export const ErSidebar: React.FC<ErSidebarProps> = (props) => {
         setIsVerticalResizing(true);
     }, []);
     
-    const handleSelectObject = (id: string, type: SelectedObject['type'] | 'other') => {
+    const handleSelectObject = (id: string, type: string) => {
         if (type === 'entity' || type === 'relationship') {
-            setSelectedObject({ id, type });
+            setSelectedObject({ id, type: type as SelectedObject['type'] });
         } else {
             setSelectedObject(null);
         }

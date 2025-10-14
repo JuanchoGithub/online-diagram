@@ -1,3 +1,8 @@
+export interface SelectedObject {
+  id: string;
+  type: 'entity' | 'relationship';
+}
+
 export interface ErAttribute {
   id: string; // e.g., "attr-CUSTOMER-name"
   type: string;

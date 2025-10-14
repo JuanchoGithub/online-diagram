@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Icon } from '../../Icon';
 import { Button } from '../../Button';
-import { SelectedObject } from './SequenceSidebar';
+import type { SelectedObject } from './helpers';
 import { Participant, Message, updateParticipant, updateMessage } from './helpers';
 
 interface FormattingPanelProps {

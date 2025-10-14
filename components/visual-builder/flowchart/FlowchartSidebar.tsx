@@ -2,13 +2,7 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import type { ThemeName, DiagramObject, ParsedDiagramObjects } from '../../../types';
 import { CollapsibleObjectList } from '../shared/CollapsibleObjectList';
 import { FlowchartFormattingPanel } from './FlowchartFormattingPanel';
-// FIX: Added parseLinkLine and getAllLinks to the import to resolve 'require' error. This replaces the dynamic require calls.
-import { formatNodeId, findLinkIndex, findNodeContext, parseLinkLine, getAllLinks } from './helpers';
-
-export interface SelectedObject {
-    id: string;
-    type: 'node' | 'subgraph' | 'edge';
-}
+import { formatNodeId, findLinkIndex, findNodeContext, parseLinkLine, getAllLinks, SelectedObject } from './helpers';
 
 interface FlowchartSidebarProps {
     sidebarSize: number;
@@ -64,11 +58,11 @@ export const FlowchartSidebar: React.FC<FlowchartSidebarProps> = (props) => {
         setIsVerticalResizing(true);
     }, []);
 
-    const handleSelectObject = (id: string, type: SelectedObject['type'] | 'other') => {
+    const handleSelectObject = (id: string, type: string) => {
         if (type === 'other') {
             setSelectedObject(null);
         } else {
-            setSelectedObject({ id, type });
+            setSelectedObject({ id, type: type as SelectedObject['type'] });
         }
     };
     
@@ -97,7 +91,6 @@ export const FlowchartSidebar: React.FC<FlowchartSidebarProps> = (props) => {
             lines.splice(firstLineIsGraph ? 1 : 0, 0, `    ${nodeLine}`);
 
             onCodeChange(lines.join('\n'));
-            // showToast('Node removed from subgraph.', 'success');
         }
 
     }, [selectedObject, nodeContext, code, onCodeChange]);
@@ -105,16 +98,14 @@ export const FlowchartSidebar: React.FC<FlowchartSidebarProps> = (props) => {
     const handleUpdateLink = useCallback((newLinkDef: { arrow?: string; text?: string }) => {
         if (!selectedObject || selectedObject.type !== 'edge') return;
         
-        // FIX: Replaced `require` with a standard ES6 import at the top of the file to resolve the 'Cannot find name' error.
         const linkIndex = findLinkIndex(code, selectedObject.id);
         if (linkIndex === -1) return;
         
-        // FIX: Replaced `require` with a standard ES6 import at the top of the file.
         const allLinks = getAllLinks(code);
         const linkToUpdate = allLinks[linkIndex];
-        const { line: trimmedLine, lineIndex } = linkToUpdate;
+        const { line: trimmedLine, lineIndex: idx } = linkToUpdate;
         const lines = code.split('\n');
-        const originalLine = lines[lineIndex];
+        const originalLine = lines[idx];
 
         const { arrow: oldArrow, text: oldText } = parseLinkLine(trimmedLine);
         
@@ -136,7 +127,7 @@ export const FlowchartSidebar: React.FC<FlowchartSidebarProps> = (props) => {
 
         const newLine = `${sourcePart}${newLinkPart}${targetPart}`;
         
-        lines[lineIndex] = newLine;
+        lines[idx] = newLine;
         onCodeChange(lines.join('\n'));
 
     }, [code, onCodeChange, selectedObject]);
@@ -146,7 +137,6 @@ export const FlowchartSidebar: React.FC<FlowchartSidebarProps> = (props) => {
         const linkIndex = findLinkIndex(code, selectedObject.id);
         if (linkIndex === -1) return;
 
-        // FIX: Replaced `require` with a standard ES6 import at the top of the file.
         const allLinks = getAllLinks(code);
         const linkToUpdate = allLinks[linkIndex];
         const { source, target, lineIndex } = linkToUpdate;

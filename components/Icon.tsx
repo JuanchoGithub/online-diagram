@@ -5,8 +5,6 @@ interface IconProps {
     className?: string;
 }
 
-// FIX: Replaced JSX.Element with React.ReactElement to resolve "Cannot find namespace 'JSX'" error.
-// Fix: Changed `JSX.Element` to `React.ReactElement` to resolve 'Cannot find namespace "JSX"' error, as `React` is imported and provides this type.
 const ICONS: { [key: string]: React.ReactElement } = {
     logo: <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />,
     editor: <path d="M10.89 2.11a2 2 0 012.22 0l8.66 5a2 2 0 011.11 1.73v10a2 2 0 01-1.11 1.73l-8.66 5a2 2 0 01-2.22 0l-8.66-5a2 2 0 01-1.11-1.73v-10a2 2 0 011.11-1.73l8.66-5zM12 22.09V12M22 8.91L12 12" />,
@@ -46,10 +44,11 @@ const ICONS: { [key: string]: React.ReactElement } = {
     folder: <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />,
     shapes: <path d="M12 1L3 7v10l9 6 9-6V7l-9-6zM3.5 8.5l8.5 5 8.5-5M12 21.5v-9.5" />,
     'move-to-folder': <><path d="M15 15l-3-3-3 3"/><path d="M12 12V3"/><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></>,
-    hand: <><polyline points="5 9 2 12 5 15" /><polyline points="9 5 12 2 15 5" /><polyline points="15 19 12 22 9 19" /><polyline points="19 9 22 12 19 15" /><line x1="2" y1="12" x2="22" y2="12" /><line x1="12" y1="2" x2="12" y2="22" /></>,
+    hand: <path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0" /><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2" /><path d="M10 9V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v5" /><path d="M6 8v2a2 2 0 0 0 2 2h2v0a2 2 0 0 0 2-2v-2" /><path d="M18 11a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h2Z" />,
     swap: <><polyline points="17 1 21 5 17 9" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" /><polyline points="7 23 3 19 7 15" /><path d="M21 13v1a4 4 0 0 1-4 4H3" /></>,
     image: <><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></>,
     search: <><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></>,
+    'share-2': <><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></>,
 };
 
 export const Icon: React.FC<IconProps> = ({ name, className = 'h-6 w-6' }) => (

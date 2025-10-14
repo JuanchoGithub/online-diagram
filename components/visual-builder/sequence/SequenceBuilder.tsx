@@ -2,13 +2,16 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { ThemeName } from '../../../types';
 import { Icon } from '../../Icon';
 import { Button } from '../../Button';
-import { SequenceSidebar, SelectedObject } from './SequenceSidebar';
+// Fix: Import `SelectedObject` type from `./helpers` instead of from `SequenceSidebar` which doesn't export it.
+import { SequenceSidebar } from './SequenceSidebar';
 import { TooltipButton } from '../shared/TooltipButton';
 import { 
     parseSvgForObjects,
     ParsedSequenceObjects,
-    addParticipant
+    addParticipant,
+    type SelectedObject
 } from './helpers';
+import { ConfirmationModal } from '../../ConfirmationModal';
 
 interface SequenceBuilderProps {
     code: string;
@@ -255,9 +258,8 @@ export const SequenceBuilder: React.FC<SequenceBuilderProps> = ({ code, onCodeCh
                 
                 <style>{`
                     .selected-object {
-                        outline: 3px solid #6366F1;
-                        outline-offset: 4px;
-                        border-radius: 4px;
+                        filter: drop-shadow(0 0 2px #a5b4fc) drop-shadow(0 0 4px #6366f1);
+                        transition: filter 0.2s;
                     }
                     .visual-canvas svg {
                         max-width: none; max-height: none; height: auto; overflow: visible;

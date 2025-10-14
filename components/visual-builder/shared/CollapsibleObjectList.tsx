@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
 import { Icon } from '../../Icon';
 import type { DiagramObject } from '../../../types';
-import type { SelectedObject } from '../flowchart/FlowchartSidebar';
 
 interface CollapsibleObjectListProps {
     title: string;
-    objects: DiagramObject[];
+    objects: (DiagramObject & { icon?: string })[];
     icon: string;
     selectedId: string | null;
-    onSelect: (id: string, type: SelectedObject['type'] | 'other') => void;
-    type: SelectedObject['type'] | 'other';
+    onSelect: (id: string, type: string) => void;
+    type: string;
     showId?: boolean;
     idFormatter?: (id: string) => string;
     defaultOpen?: boolean;
@@ -54,7 +53,7 @@ export const CollapsibleObjectList: React.FC<CollapsibleObjectListProps> = ({
                                     }`}
                                     title={obj.label}
                                 >
-                                    <Icon name={icon} className="w-4 h-4 flex-shrink-0" />
+                                    <Icon name={obj.icon || icon} className="w-4 h-4 flex-shrink-0" />
                                     <div className="flex-grow min-w-0 overflow-x-auto whitespace-nowrap" style={{ scrollbarWidth: 'thin' }}>
                                         <span>{obj.label}</span>
                                         {showId && (

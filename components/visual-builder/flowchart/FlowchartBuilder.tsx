@@ -7,7 +7,8 @@ import type { Shape } from '../../shapesData';
 import { MoveToSubgraphModal } from '../../MoveToSubgraphModal';
 import { ConfirmationModal } from '../../ConfirmationModal';
 import { IconPickerModal } from '../../IconPickerModal';
-import { FlowchartSidebar, SelectedObject } from './FlowchartSidebar';
+// Fix: Import `SelectedObject` type from `./helpers` instead of from `FlowchartSidebar` which doesn't export it.
+import { FlowchartSidebar } from './FlowchartSidebar';
 import { TooltipButton } from '../shared/TooltipButton';
 import { 
     formatNodeId, 
@@ -18,7 +19,8 @@ import {
     getInternalNodeIds,
     findNodeSyntaxInCode,
     reconstructDefinition,
-    parseSvgForObjects
+    parseSvgForObjects,
+    type SelectedObject
 } from './helpers';
 
 interface VisualBuilderViewProps {

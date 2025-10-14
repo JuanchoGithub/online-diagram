@@ -37,7 +37,7 @@ export const sequenceSyntax: DiagramSyntax = {
             explanation: {
                 title: 'Special Participant Types',
                 description: 'Uses JSON configuration to define a participant with a special shape like `boundary`, `control`, `entity`, `database`, `collections`, or `queue`.',
-                example: 'participant DB @{ type: "database" }'
+                example: 'participant DB@{ type: "database" }'
             },
             category: 'Participants',
         },
@@ -46,7 +46,7 @@ export const sequenceSyntax: DiagramSyntax = {
             explanation: {
                 title: 'Participant Creation/Destruction',
                 description: 'Dynamically creates or destroys a participant during the sequence flow. `create` must come before a message to the new participant, and `destroy` must come before a message from the participant being destroyed.',
-                example: 'create participant Carl\nAlice->>Carl: Hi!\ndestroy Carl\nCarl->>Alice: Goodbye!'
+                example: 'create participant Carl\nAlice->>Carl: Hi!\ndestroy Carl'
             },
             category: 'Participants'
         },
@@ -64,7 +64,7 @@ export const sequenceSyntax: DiagramSyntax = {
             matcher: /->|-\)/,
             explanation: {
                 title: 'Message (Open Arrow)',
-                description: 'Represents an asynchronous message where the sender does not wait for a response. `->` is a solid line and `-)` is a dotted line.',
+                description: 'Represents an asynchronous message where the sender does not wait for a response. `->` is a solid line with an open arrow and `-)` is a solid line with an open arrow.',
                 example: 'Alice->Bob: FYI, this event occurred.'
             },
             category: 'Messages',
@@ -91,7 +91,7 @@ export const sequenceSyntax: DiagramSyntax = {
             matcher: /-->|->/,
             explanation: {
                 title: 'Message (No Arrowhead)',
-                description: 'Represents a simple connection without a specific direction indicated by an arrowhead. `-->` is a dashed line and `->` is a solid line.',
+                description: 'Represents a simple connection without a specific direction indicated by an arrowhead. `-->` is a dotted line and `->` is a solid line.',
                 example: 'Alice-->Bob: A comment about connection'
             },
             category: 'Messages',
@@ -110,7 +110,7 @@ export const sequenceSyntax: DiagramSyntax = {
             matcher: /-\s*$/,
             explanation: {
                 title: 'Activation End',
-                description: 'Deactivates a participant, ending the action block on its lifeline. Use a `-` at theend of a message line.',
+                description: 'Deactivates a participant, ending the action block on its lifeline. Use a `-` at the end of a message line.',
                 example: 'API-->>-User: Return data'
             },
             category: 'Activations',
@@ -210,11 +210,11 @@ export const sequenceSyntax: DiagramSyntax = {
         },
         // GENERAL
         {
-            matcher: /autonumber/,
+            matcher: /autonumber|showSequenceNumbers/,
             explanation: {
                 title: 'Autonumber',
-                description: 'Automatically numbers each message in the diagram, making it easier to follow the sequence of events.',
-                example: 'autonumber'
+                description: 'Automatically numbers each message in the diagram, making it easier to follow the sequence of events. Can be enabled with `autonumber` or via a config block.',
+                example: 'autonumber\n%%{init: {\'sequence\': {\'showSequenceNumbers\': true}}}%%'
             },
             category: 'General',
         },

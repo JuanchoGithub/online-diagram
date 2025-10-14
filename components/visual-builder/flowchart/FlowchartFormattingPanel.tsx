@@ -3,7 +3,7 @@ import type { ThemeName, DiagramObject } from '../../../types';
 import { Icon } from '../../Icon';
 import { Button } from '../../Button';
 import { ColorPicker } from '../../ColorPicker';
-import { SelectedObject } from './FlowchartSidebar';
+import type { SelectedObject } from './helpers';
 import { 
     parseNodeStyle,
     parseLinkStyle,
@@ -11,7 +11,6 @@ import {
     parseImageNode,
     parseLinkLine,
     getAllLinks,
-    // FIX: Added formatNodeId to the import statement to resolve the 'require' error.
     formatNodeId
 } from './helpers';
 

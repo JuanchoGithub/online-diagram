@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Icon } from '../../Icon';
 import { Button } from '../../Button';
-import { SelectedObject } from './ErSidebar';
+import type { SelectedObject } from './helpers';
 import { ErEntity, ErRelationship, ErAttribute, updateEntity, addAttribute, updateAttribute, deleteAttribute, updateRelationship } from './helpers';
 
 interface FormattingPanelProps {
@@ -31,6 +31,10 @@ const EntityFormatControls: React.FC<{
 }> = ({ entity, code, onCodeChange }) => {
     const [name, setName] = useState(entity.name);
     const [attributes, setAttributes] = useState(entity.attributes);
+
+    useEffect(() => {
+        setAttributes(entity.attributes);
+    }, [entity.attributes]);
 
     useEffect(() => {
         const handler = setTimeout(() => {

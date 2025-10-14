@@ -9,23 +9,29 @@ export const sequenceTutorial: TutorialContent = {
       id: 'Participants',
       steps: [
         {
-          title: 'Defining Participants',
-          description: 'Participants are the primary entities in a sequence diagram. Use `participant` for a standard box and `actor` for a user symbol. You can also define an `as` alias for brevity.',
+          title: 'Defining Participants & Actors',
+          description: 'Participants are the primary entities in a sequence diagram. Use `participant` for a standard box and `actor` for a user symbol. It is good practice to declare them at the top to control their order.',
           code: `sequenceDiagram
     actor User
+    participant "API Gateway"
+    participant "Backend Service"`,
+        },
+        {
+          title: 'Aliases',
+          description: 'You can define an `as` alias for a participant to use a shorter identifier in the rest of the diagram.',
+          code: `sequenceDiagram
     participant "API Gateway" as GW
     participant "Backend Service" as BE
 
-    User->>GW: Request data
-    GW->>BE: Forward request`,
+    GW->>BE: Forward request`
         },
         {
           title: 'Special Participant Shapes',
           description: 'For more descriptive diagrams, you can assign special shapes to participants using the `@{ type: "..." }` syntax. Supported types include `boundary`, `control`, `entity`, `database`, `collections`, and `queue`.',
           code: `sequenceDiagram
-    participant User @{ type: "boundary" }
-    participant Logic @{ type: "control" }
-    participant DB @{ type: "database" }
+    participant User@{ type: "boundary" }
+    participant Logic@{ type: "control" }
+    participant DB@{ type: "database" }
     
     User->>Logic: Save data
     Logic->>DB: INSERT query`,
@@ -70,14 +76,16 @@ export const sequenceTutorial: TutorialContent = {
                 <tr><th class="px-4 py-2">Syntax</th><th class="px-4 py-2">Description</th></tr>
               </thead>
               <tbody>
-                <tr class="border-b border-gray-700 hover:bg-gray-700/50"><td class="px-4 py-2 font-mono"><code>->></code></td><td class="px-4 py-2">Solid line with solid arrowhead (synchronous call)</td></tr>
-                <tr class="border-b border-gray-700 hover:bg-gray-700/50"><td class="px-4 py-2 font-mono"><code>-->></code></td><td class="px-4 py-2">Dashed line with solid arrowhead (reply or async)</td></tr>
-                <tr class="border-b border-gray-700 hover:bg-gray-700/50"><td class="px-4 py-2 font-mono"><code>-></code></td><td class="px-4 py-2">Solid line with open arrowhead (async call)</td></tr>
-                <tr class="border-b border-gray-700 hover:bg-gray-700/50"><td class="px-4 py-2 font-mono"><code>--)</code></td><td class="px-4 py-2">Dashed line with open arrowhead (async call)</td></tr>
+                <tr class="border-b border-gray-700 hover:bg-gray-700/50"><td class="px-4 py-2 font-mono"><code>-></code></td><td class="px-4 py-2">Solid line without arrowhead</td></tr>
+                <tr class="border-b border-gray-700 hover:bg-gray-700/50"><td class="px-4 py-2 font-mono"><code>--></code></td><td class="px-4 py-2">Dotted line without arrowhead</td></tr>
+                <tr class="border-b border-gray-700 hover:bg-gray-700/50"><td class="px-4 py-2 font-mono"><code>->></code></td><td class="px-4 py-2">Solid line with arrowhead (synchronous call)</td></tr>
+                <tr class="border-b border-gray-700 hover:bg-gray-700/50"><td class="px-4 py-2 font-mono"><code>-->></code></td><td class="px-4 py-2">Dotted line with arrowhead (reply or async)</td></tr>
+                <tr class="border-b border-gray-700 hover:bg-gray-700/50"><td class="px-4 py-2 font-mono"><code>-)</code></td><td class="px-4 py-2">Solid line with open arrowhead (async call)</td></tr>
+                <tr class="border-b border-gray-700 hover:bg-gray-700/50"><td class="px-4 py-2 font-mono"><code>--)</code></td><td class="px-4 py-2">Dotted line with open arrowhead (async call)</td></tr>
                 <tr class="border-b border-gray-700 hover:bg-gray-700/50"><td class="px-4 py-2 font-mono"><code>-x</code></td><td class="px-4 py-2">Solid line with a cross (lost/error message)</td></tr>
-                <tr class="border-b border-gray-700 hover:bg-gray-700/50"><td class="px-4 py-2 font-mono"><code>--x</code></td><td class="px-4 py-2">Dashed line with a cross (lost/error message)</td></tr>
+                <tr class="border-b border-gray-700 hover:bg-gray-700/50"><td class="px-4 py-2 font-mono"><code>--x</code></td><td class="px-4 py-2">Dotted line with a cross (lost/error message)</td></tr>
                 <tr class="border-b border-gray-700 hover:bg-gray-700/50"><td class="px-4 py-2 font-mono"><code><<->></code></td><td class="px-4 py-2">Solid line with bidirectional arrowheads</td></tr>
-                <tr class="hover:bg-gray-700/50"><td class="px-4 py-2 font-mono"><code><<-->></code></td><td class="px-4 py-2">Dashed line with bidirectional arrowheads</td></tr>
+                <tr class="hover:bg-gray-700/50"><td class="px-4 py-2 font-mono"><code><<-->></code></td><td class="px-4 py-2">Dotted line with bidirectional arrowheads</td></tr>
               </tbody>
             </table>
           </div>`,
@@ -85,7 +93,7 @@ export const sequenceTutorial: TutorialContent = {
     A->>B: Synchronous Call
     B-->>A: Synchronous Reply
     A->B: Asynchronous Call
-    A-x_B: Lost Message`,
+    A-xB: Lost Message`,
         },
       ],
     },
