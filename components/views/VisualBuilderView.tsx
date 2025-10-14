@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { ThemeName, DiagramObject, ParsedDiagramObjects } from '../../types';
 import { Icon } from '../Icon';
@@ -6,6 +8,7 @@ import { ShapesPalette } from '../ShapesPalette';
 import type { Shape } from '../shapesData';
 import { MoveToSubgraphModal } from '../MoveToSubgraphModal';
 import { ConfirmationModal } from '../ConfirmationModal';
+import { IconPickerModal } from '../IconPickerModal';
 // FIX: Removed parseLinkLine from import to resolve incorrect function usage and prevent potential circular dependencies.
 // Fix: Import `parseLinkLine` from `FormattingPanel` to resolve the 'Cannot find name' error. It is safe to import now because the original circular dependency was broken by moving other helper functions.
 import { FormattingPanel, getAllLinks, parseLinkLine } from '../FormattingPanel';
@@ -403,6 +406,7 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
     const [diagramObjects, setDiagramObjects] = useState<ParsedDiagramObjects>({ nodes: [], edges: [], subgraphs: [], others: [] });
     const [selectedObject, setSelectedObject] = useState<SelectedObject | null>(null);
     const [isShapesPaletteOpen, setIsShapesPaletteOpen] = useState(false);
+    const [isIconPickerOpen, setIsIconPickerOpen] = useState(false);
     const [isMoveToSubgraphModalOpen, setIsMoveToSubgraphModalOpen] = useState(false);
     const [linkingTargetId, setLinkingTargetId] = useState<string | null>(null);
     const [linkingState, setLinkingState] = useState<{
@@ -1497,6 +1501,26 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
         showToast(`Added ${shape.name} node.`, 'success');
     };
     
+    const handleAddIcon = useCallback((svgDataUri: string) => {
+        const iconNodeId = `icon${nodeCounterRef.current++}`;
+        const newNodeCode = `${iconNodeId}["<img src='${svgDataUri}' width='40' height='40' />"]`;
+        const nodeStyleCode = `style ${iconNodeId} fill:transparent,stroke:none`;
+    
+        let updatedCode = code.trim();
+        const diagramType = updatedCode.split('\n')[0]?.trim();
+        const newLines = `\n  ${newNodeCode}\n  ${nodeStyleCode}`;
+    
+        if (!diagramType || (!diagramType.startsWith('graph') && !diagramType.startsWith('flowchart'))) {
+            updatedCode = `flowchart TD${newLines}`;
+        } else {
+            updatedCode = `${updatedCode}${newLines}`;
+        }
+        
+        onCodeChange(updatedCode);
+        setIsIconPickerOpen(false);
+        showToast(`Icon added to canvas.`, 'success');
+    }, [code, onCodeChange, showToast]);
+
     const handleAddSubgraph = useCallback(() => {
         const subgraphId = `subgraph${subgraphCounterRef.current++}`;
         const newNodeId = `node${nodeCounterRef.current++}`;
@@ -1556,6 +1580,12 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
                             tooltipText="Add Shape"
                         />
                         <TooltipButton
+                            onClick={() => setIsIconPickerOpen(true)}
+                            aria-label="Add Icon"
+                            iconName="image"
+                            tooltipText="Add Icon"
+                        />
+                        <TooltipButton
                             onClick={handleAddSubgraph}
                             aria-label="Add Subgraph"
                             iconName="folder"
@@ -1569,6 +1599,12 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
                     onClose={() => setIsShapesPaletteOpen(false)}
                     onAddShape={handleAddShape}
                     theme={theme}
+                />
+
+                <IconPickerModal
+                    isOpen={isIconPickerOpen}
+                    onClose={() => setIsIconPickerOpen(false)}
+                    onAddIcon={handleAddIcon}
                 />
 
                 <MoveToSubgraphModal
