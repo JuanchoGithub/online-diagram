@@ -112,7 +112,7 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({ isOpen, onClos
                 {/* Header */}
                 <div className="flex-shrink-0 bg-gray-700 p-4 flex justify-between items-center rounded-t-lg">
                     <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                        <Icon name="image" className="w-6 h-6" />
+                        <Icon name="palette" className="w-6 h-6" />
                         Add Icon
                     </h2>
                     <button onClick={onClose} className="text-gray-400 hover:text-white">

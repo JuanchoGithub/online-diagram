@@ -1521,6 +1521,30 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
         showToast(`Icon added to canvas.`, 'success');
     }, [code, onCodeChange, showToast]);
 
+    const handleAddPicture = useCallback(() => {
+        const newImageNodeId = `img${nodeCounterRef.current++}`;
+        const defaultImageUrl = "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/Flag_of_Argentina_%28civil%29.svg/330px-Flag_of_Argentina_%28civil%29.svg.png";
+        const defaultTitle = "New Picture";
+        const defaultWidth = 100;
+        const defaultHeight = 60;
+
+        const newNodeCode = `${newImageNodeId}["<img src='${defaultImageUrl}' width='${defaultWidth}' height='${defaultHeight}' /> ${defaultTitle}"]`;
+        const nodeStyleCode = `style ${newImageNodeId} fill:transparent,stroke:none`;
+
+        let updatedCode = code.trim();
+        const diagramType = updatedCode.split('\n')[0]?.trim();
+        const newLines = `\n  ${newNodeCode}\n  ${nodeStyleCode}`;
+
+        if (!diagramType || (!diagramType.startsWith('graph') && !diagramType.startsWith('flowchart'))) {
+            updatedCode = `flowchart TD${newLines}`;
+        } else {
+            updatedCode = `${updatedCode}${newLines}`;
+        }
+        
+        onCodeChange(updatedCode);
+        showToast(`Added a picture to the canvas.`, 'success');
+    }, [code, onCodeChange, showToast]);
+
     const handleAddSubgraph = useCallback(() => {
         const subgraphId = `subgraph${subgraphCounterRef.current++}`;
         const newNodeId = `node${nodeCounterRef.current++}`;
@@ -1581,9 +1605,15 @@ export const VisualBuilderView: React.FC<VisualBuilderViewProps> = ({ code, onCo
                         />
                         <TooltipButton
                             onClick={() => setIsIconPickerOpen(true)}
-                            aria-label="Add Icon"
+                            aria-label="Add Vector Icon"
+                            iconName="palette"
+                            tooltipText="Add Vector Icon"
+                        />
+                        <TooltipButton
+                            onClick={handleAddPicture}
+                            aria-label="Add Picture"
                             iconName="image"
-                            tooltipText="Add Icon"
+                            tooltipText="Add Picture"
                         />
                         <TooltipButton
                             onClick={handleAddSubgraph}

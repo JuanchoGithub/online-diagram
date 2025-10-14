@@ -120,6 +120,33 @@ const parseNodeDefinition = (code: string, nodeId: string): { label: string; ful
     return { label: definition ? definition : nodeId, fullLine, type: 'id-only' };
 };
 
+const parseImageNode = (label: string): { isImage: true; src: string; width?: string; height?: string; title?: string } | { isImage: false } => {
+    const imgTagMatch = label.match(/<img\s+(.*?)\/?>\s*(.*)/s);
+    if (!imgTagMatch) {
+        return { isImage: false };
+    }
+
+    const attrsString = imgTagMatch[1];
+    const title = imgTagMatch[2].trim();
+
+    const getAttr = (attrName: string) => {
+        const regex = new RegExp(`${attrName}=['"](.*?)['"]`);
+        const match = attrsString.match(regex);
+        return match ? match[1] : undefined;
+    };
+
+    const src = getAttr('src');
+    if (!src) return { isImage: false }; // src is mandatory
+
+    return {
+        isImage: true,
+        src,
+        width: getAttr('width'),
+        height: getAttr('height'),
+        title,
+    };
+};
+
 const ColorSwatchButton: React.FC<{ label: string; color?: string; onClick: () => void; }> = ({ label, color, onClick }) => (
     <div className="flex-1">
         <label className="block text-xs font-medium text-gray-400 mb-1">{label}</label>
@@ -130,6 +157,76 @@ const ColorSwatchButton: React.FC<{ label: string; color?: string; onClick: () =
     </div>
 );
 
+const ImageFormatControls: React.FC<{
+    imageInfo: { src: string; width?: string; height?: string; title?: string };
+    onLabelChange: (newLabel: string) => void;
+}> = ({ imageInfo, onLabelChange }) => {
+    const [values, setValues] = useState(imageInfo);
+
+    useEffect(() => {
+        setValues(imageInfo);
+    }, [imageInfo]);
+
+    const handleChange = (field: keyof typeof values, value: string) => {
+        const newValues = { ...values, [field]: value };
+        setValues(newValues);
+
+        let attrs = `src='${newValues.src}'`;
+        if (newValues.width) attrs += ` width='${newValues.width}'`;
+        if (newValues.height) attrs += ` height='${newValues.height}'`;
+        
+        const newLabel = `<img ${attrs} /> ${newValues.title || ''}`;
+        onLabelChange(newLabel);
+    };
+
+    return (
+        <div className="space-y-4">
+             <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Image URL</label>
+                <input 
+                    type="text"
+                    value={values.src || ''} 
+                    onChange={e => handleChange('src', e.target.value)}
+                    className="w-full bg-gray-900 text-white rounded-md p-1.5 text-sm"
+                    placeholder="https://example.com/image.png"
+                />
+            </div>
+            <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Title</label>
+                <input 
+                    type="text"
+                    value={values.title || ''} 
+                    onChange={e => handleChange('title', e.target.value)}
+                    className="w-full bg-gray-900 text-white rounded-md p-1.5 text-sm"
+                    placeholder="Image title text"
+                />
+            </div>
+            <div className="flex gap-2">
+                <div className="flex-1">
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Width</label>
+                    <input
+                        type="text"
+                        value={values.width || ''}
+                        onChange={e => handleChange('width', e.target.value)}
+                        className="w-full bg-gray-900 text-white rounded-md p-1.5 text-sm"
+                        placeholder="e.g., 100"
+                    />
+                </div>
+                <div className="flex-1">
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Height</label>
+                    <input
+                        type="text"
+                        value={values.height || ''}
+                        onChange={e => handleChange('height', e.target.value)}
+                        className="w-full bg-gray-900 text-white rounded-md p-1.5 text-sm"
+                        placeholder="e.g., 60"
+                    />
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const NodeFormatControls: React.FC<{
     styles: Record<string, string>,
     label: string,
@@ -138,6 +235,8 @@ const NodeFormatControls: React.FC<{
 }> = ({ styles, label, onStyleChange, onLabelChange }) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [activeColorPicker, setActiveColorPicker] = useState<'color' | 'fill' | 'stroke' | null>(null);
+
+    const imageInfo = useMemo(() => parseImageNode(label), [label]);
 
     const insertMarkdown = (markdown: string) => {
         if (!textareaRef.current) return;
@@ -153,27 +252,35 @@ const NodeFormatControls: React.FC<{
 
     return (
         <div className="space-y-4">
-            <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1">Text</label>
-                <div className="relative">
-                    <textarea ref={textareaRef} value={label} onChange={(e) => onLabelChange(e.target.value)} rows={2} className="w-full bg-gray-900 text-white rounded-md p-2 text-sm focus:ring-indigo-500 focus:border-indigo-500" />
-                    <div className="absolute top-1 right-1 flex gap-1">
-                        <Button onClick={() => insertMarkdown('**')} className="!p-1 !text-xs" title="Bold"><Icon name="bold" className="w-3 h-3"/></Button>
-                        <Button onClick={() => insertMarkdown('_')} className="!p-1 !text-xs" title="Italic"><Icon name="italic" className="w-3 h-3"/></Button>
+            {imageInfo.isImage ? (
+                <ImageFormatControls imageInfo={imageInfo} onLabelChange={onLabelChange} />
+            ) : (
+                <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Text</label>
+                    <div className="relative">
+                        <textarea ref={textareaRef} value={label} onChange={(e) => onLabelChange(e.target.value)} rows={2} className="w-full bg-gray-900 text-white rounded-md p-2 text-sm focus:ring-indigo-500 focus:border-indigo-500" />
+                        <div className="absolute top-1 right-1 flex gap-1">
+                            <Button onClick={() => insertMarkdown('**')} className="!p-1 !text-xs" title="Bold"><Icon name="bold" className="w-3 h-3"/></Button>
+                            <Button onClick={() => insertMarkdown('_')} className="!p-1 !text-xs" title="Italic"><Icon name="italic" className="w-3 h-3"/></Button>
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
             
-            <div className="flex gap-2">
-                <ColorSwatchButton label="Text Color" color={styles.color} onClick={() => toggleColorPicker('color')} />
-                <ColorSwatchButton label="Background" color={styles.fill} onClick={() => toggleColorPicker('fill')} />
-            </div>
+            {!imageInfo.isImage && (
+                <>
+                    <div className="flex gap-2">
+                        <ColorSwatchButton label="Text Color" color={styles.color} onClick={() => toggleColorPicker('color')} />
+                        <ColorSwatchButton label="Background" color={styles.fill} onClick={() => toggleColorPicker('fill')} />
+                    </div>
 
-            {activeColorPicker && (activeColorPicker === 'color' || activeColorPicker === 'fill') && (
-                <div className="bg-gray-900/70 p-3 rounded-md">
-                    <h5 className="text-xs font-semibold text-gray-300 mb-2 capitalize">{activeColorPicker === 'color' ? 'Text' : 'Background'} Color</h5>
-                    <ColorPicker color={styles[activeColorPicker]} onChange={c => onStyleChange(activeColorPicker, c)} />
-                </div>
+                    {activeColorPicker && (activeColorPicker === 'color' || activeColorPicker === 'fill') && (
+                        <div className="bg-gray-900/70 p-3 rounded-md">
+                            <h5 className="text-xs font-semibold text-gray-300 mb-2 capitalize">{activeColorPicker === 'color' ? 'Text' : 'Background'} Color</h5>
+                            <ColorPicker color={styles[activeColorPicker]} onChange={c => onStyleChange(activeColorPicker, c)} />
+                        </div>
+                    )}
+                </>
             )}
 
             <div>
