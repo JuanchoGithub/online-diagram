@@ -113,16 +113,31 @@ const App: React.FC = () => {
 
     const handleThemeChange = useCallback((newTheme: ThemeName) => {
         setTheme(newTheme);
-        (window as any).mermaid.initialize({
-            startOnLoad: false,
-            theme: newTheme,
-            ...THEMES[newTheme].config
-        });
     }, []);
 
     useEffect(() => {
-        handleThemeChange(theme);
-    }, [theme, handleThemeChange]);
+        const applyTheme = () => {
+            if (typeof (window as any).mermaid?.initialize === 'function') {
+                (window as any).mermaid.initialize({
+                    startOnLoad: false,
+                    theme: theme,
+                    ...THEMES[theme].config
+                });
+                return true;
+            }
+            return false;
+        };
+
+        if (!applyTheme()) {
+            const intervalId = setInterval(() => {
+                if (applyTheme()) {
+                    clearInterval(intervalId);
+                }
+            }, 100);
+
+            return () => clearInterval(intervalId);
+        }
+    }, [theme]);
 
     const handleCodeFromOtherView = (newCode: string, sourceView: View) => {
         setCode(newCode);
