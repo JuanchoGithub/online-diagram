@@ -74,11 +74,24 @@ export const FlowchartBuilder: React.FC<VisualBuilderViewProps> = ({ code, onCod
     });
 
     const nodeCounterRef = useRef(1);
+    const hoveredElementRef = useRef<Element | null>(null);
     const subgraphCounterRef = useRef(1);
     const dragStartPointRef = useRef<{ x: number; y: number; target: HTMLElement | null } | null>(null);
     const svgContainerRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const mermaidId = 'visual-builder-preview';
+
+    const highlightColor = useMemo(() => {
+        switch (theme) {
+            case 'dark':
+            case 'forest':
+                return '#FBBF24'; // amber-400
+            case 'default':
+            case 'neutral':
+            default:
+                return '#3B82F6'; // blue-500
+        }
+    }, [theme]);
 
     const handleMouseDownOnDivider = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
@@ -671,6 +684,26 @@ export const FlowchartBuilder: React.FC<VisualBuilderViewProps> = ({ code, onCod
         };
     }, [isResizing]);
 
+    const handleMouseOver = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (isPanning || isResizing || linkingState.startNodeId) return;
+
+        const target = e.target as HTMLElement;
+        const objectGroup = target.closest('g.subgraph, g.cluster, g.node, g.edge');
+
+        if (hoveredElementRef.current && hoveredElementRef.current !== objectGroup) {
+            hoveredElementRef.current.classList.remove('hovered-object');
+            hoveredElementRef.current = null;
+        }
+
+        if (objectGroup && objectGroup !== hoveredElementRef.current) {
+            // Don't hover the main SVG container if it's matched
+            if (objectGroup.classList.contains('root')) return;
+            
+            objectGroup.classList.add('hovered-object');
+            hoveredElementRef.current = objectGroup;
+        }
+    };
+
     useEffect(() => {
         const renderMermaid = async () => {
             if (!code.trim()) {
@@ -873,6 +906,10 @@ export const FlowchartBuilder: React.FC<VisualBuilderViewProps> = ({ code, onCod
             setLinkingState({ startNodeId: null, startPoint: null, endPoint: null });
             setLinkingTargetId(null);
         }
+        if (hoveredElementRef.current) {
+            hoveredElementRef.current.classList.remove('hovered-object');
+            hoveredElementRef.current = null;
+        }
     };
     
     const handleWheel = (e: React.WheelEvent) => {
@@ -1012,7 +1049,7 @@ export const FlowchartBuilder: React.FC<VisualBuilderViewProps> = ({ code, onCod
                             onClick={() => setIsPanMode(!isPanMode)}
                             className={isPanMode ? '!bg-indigo-500' : ''}
                             aria-label="Toggle Pan Mode (V)"
-                            iconName="hand"
+                            iconName="pan"
                             tooltipText="Pan (V)"
                         />
                         <TooltipButton
@@ -1085,6 +1122,11 @@ export const FlowchartBuilder: React.FC<VisualBuilderViewProps> = ({ code, onCod
                         border-radius: 4px;
                         transition: outline 0.1s ease-in-out;
                     }
+                    .hovered-object {
+                        outline: 2px solid ${highlightColor};
+                        outline-offset: 2px;
+                        transition: outline 0.1s ease-in-out;
+                    }
                     .linking-target {
                         outline: 3px solid #F59E0B; /* Amber-500 */
                         outline-offset: 4px;
@@ -1110,6 +1152,7 @@ export const FlowchartBuilder: React.FC<VisualBuilderViewProps> = ({ code, onCod
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
                     onMouseLeave={handleMouseLeave}
+                    onMouseOver={handleMouseOver}
                     onWheel={handleWheel}
                     className="w-full h-full p-4 visual-canvas flex-grow relative grid place-items-center overflow-hidden"
                     style={{ cursor: isPanMode ? (isPanning ? 'grabbing' : 'grab') : 'default' }}

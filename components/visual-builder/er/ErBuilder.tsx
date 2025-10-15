@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { ThemeName } from '../../../types';
 import { Icon } from '../../Icon';
 import { Button } from '../../Button';
@@ -48,10 +48,23 @@ export const ErBuilder: React.FC<ErBuilderProps> = ({ code, onCodeChange, theme,
         onClose: () => {},
     });
 
+    const hoveredElementRef = useRef<Element | null>(null);
     const svgContainerRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const dragStartPointRef = useRef<{ x: number; y: number; target: HTMLElement | null } | null>(null);
     const mermaidId = 'visual-builder-er-preview';
+
+    const highlightColor = useMemo(() => {
+        switch (theme) {
+            case 'dark':
+            case 'forest':
+                return '#FBBF24'; // amber-400
+            case 'default':
+            case 'neutral':
+            default:
+                return '#3B82F6'; // blue-500
+        }
+    }, [theme]);
 
     const handleMouseDownOnDivider = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
@@ -202,6 +215,22 @@ export const ErBuilder: React.FC<ErBuilderProps> = ({ code, onCodeChange, theme,
         dragStartPointRef.current = { x: e.clientX, y: e.clientY, target: e.target as HTMLElement };
     };
 
+    const handleMouseOver = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (isPanning || isResizing) return;
+        const target = e.target as HTMLElement;
+        const objectGroup = target.closest('[data-id]');
+  
+        if (hoveredElementRef.current && hoveredElementRef.current !== objectGroup) {
+            hoveredElementRef.current.classList.remove('hovered-object');
+            hoveredElementRef.current = null;
+        }
+  
+        if (objectGroup && objectGroup !== hoveredElementRef.current) {
+            objectGroup.classList.add('hovered-object');
+            hoveredElementRef.current = objectGroup;
+        }
+    };
+
     const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
         if (isPanMode && isPanning) {
             e.preventDefault();
@@ -246,6 +275,10 @@ export const ErBuilder: React.FC<ErBuilderProps> = ({ code, onCodeChange, theme,
             setIsPanning(false);
         }
         dragStartPointRef.current = null;
+        if (hoveredElementRef.current) {
+            hoveredElementRef.current.classList.remove('hovered-object');
+            hoveredElementRef.current = null;
+        }
     };
     
     const handleWheel = (e: React.WheelEvent) => {
@@ -314,6 +347,11 @@ export const ErBuilder: React.FC<ErBuilderProps> = ({ code, onCodeChange, theme,
                         outline-offset: 4px;
                         border-radius: 4px;
                     }
+                    .hovered-object {
+                        outline: 2px solid ${highlightColor};
+                        outline-offset: 2px;
+                        border-radius: 4px;
+                    }
                     .visual-canvas svg {
                         max-width: none; max-height: none; height: auto; overflow: visible;
                     }
@@ -328,6 +366,7 @@ export const ErBuilder: React.FC<ErBuilderProps> = ({ code, onCodeChange, theme,
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
                     onMouseLeave={handleMouseLeave}
+                    onMouseOver={handleMouseOver}
                     onWheel={handleWheel}
                     className="w-full h-full p-4 visual-canvas flex-grow relative grid place-items-center overflow-hidden"
                     style={{ cursor: isPanMode ? (isPanning ? 'grabbing' : 'grab') : 'default' }}

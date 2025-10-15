@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { CollapsibleObjectList } from '../shared/CollapsibleObjectList';
 import { SequenceFormattingPanel } from './SequenceFormattingPanel';
-import { ParsedSequenceObjects, Participant, Message, SelectedObject } from './helpers';
+// FIX: Import all required types from helpers
+import { ParsedSequenceObjects, Participant, Message, SelectedObject, Note, Box, Fragment, Activation } from './helpers';
 
 interface SequenceSidebarProps {
     sidebarSize: number;
@@ -15,7 +16,10 @@ interface SequenceSidebarProps {
 
 const participantIconMap: Record<string, string> = {
     actor: 'user',
-    database: 'save',
+    database: 'save', // Using 'save' icon for database
+    boundary: 'circle',
+    control: 'git-commit',
+    entity: 'diamond',
 };
 
 
@@ -40,7 +44,7 @@ export const SequenceSidebar: React.FC<SequenceSidebarProps> = (props) => {
     }, []);
     
     const handleSelectObject = (id: string, type: string) => {
-        if (type === 'message' || type === 'participant') {
+        if (['message', 'participant', 'note', 'box', 'fragment', 'activation'].includes(type)) {
             setSelectedObject({ id, type: type as SelectedObject['type'] });
         } else {
             setSelectedObject(null);
@@ -55,7 +59,7 @@ export const SequenceSidebar: React.FC<SequenceSidebarProps> = (props) => {
             return {
                 ...p,
                 label: isSpecial ? `${p.label} (${p.type})` : p.label,
-                icon: icon, // will be undefined for some, falling back to default
+                icon: icon,
             };
         });
     }, [diagramObjects.participants]);
@@ -90,13 +94,22 @@ export const SequenceSidebar: React.FC<SequenceSidebarProps> = (props) => {
     
     const selectedItemData = useMemo(() => {
         if (!selectedObject) return null;
-        if (selectedObject.type === 'participant') {
-            return diagramObjects.participants.find(p => p.id === selectedObject.id);
+        switch(selectedObject.type) {
+            case 'participant':
+                return diagramObjects.participants.find(p => p.id === selectedObject.id);
+            case 'message':
+                return diagramObjects.messages.find(m => m.id === selectedObject.id);
+            case 'note':
+                return diagramObjects.notes.find(n => n.id === selectedObject.id);
+            case 'box':
+                return diagramObjects.boxes.find(b => b.id === selectedObject.id);
+            case 'fragment':
+                return diagramObjects.fragments.find(f => f.id === selectedObject.id);
+            case 'activation':
+                return diagramObjects.activations.find(a => a.id === selectedObject.id);
+            default:
+                return null;
         }
-        if (selectedObject.type === 'message') {
-            return diagramObjects.messages.find(m => m.id === selectedObject.id);
-        }
-        return null;
     }, [selectedObject, diagramObjects]);
 
     return (
@@ -112,6 +125,10 @@ export const SequenceSidebar: React.FC<SequenceSidebarProps> = (props) => {
                 <h3 className="text-base font-semibold text-white mb-4">Diagram Objects</h3>
                 <CollapsibleObjectList title="Participants" objects={participantsForList} icon="square" selectedId={selectedObject?.id ?? null} onSelect={handleSelectObject} type="participant" />
                 <CollapsibleObjectList title="Messages" objects={diagramObjects.messages} icon="link" selectedId={selectedObject?.id ?? null} onSelect={handleSelectObject} type="message" />
+                <CollapsibleObjectList title="Activations" objects={diagramObjects.activations} icon="square" selectedId={selectedObject?.id ?? null} onSelect={handleSelectObject} type="activation" defaultOpen={false} />
+                <CollapsibleObjectList title="Boxes" objects={diagramObjects.boxes} icon="folder" selectedId={selectedObject?.id ?? null} onSelect={handleSelectObject} type="box" />
+                <CollapsibleObjectList title="Notes" objects={diagramObjects.notes} icon="note" selectedId={selectedObject?.id ?? null} onSelect={handleSelectObject} type="note" />
+                <CollapsibleObjectList title="Fragments" objects={diagramObjects.fragments} icon="alt" selectedId={selectedObject?.id ?? null} onSelect={handleSelectObject} type="fragment" />
             </div>
             
             {selectedObject && selectedItemData && (
@@ -128,7 +145,8 @@ export const SequenceSidebar: React.FC<SequenceSidebarProps> = (props) => {
                         <SequenceFormattingPanel
                             key={selectedObject.id} // Re-mount when selection changes
                             selectedObject={selectedObject}
-                            itemData={selectedItemData}
+                            itemData={selectedItemData as any}
+                            allParticipants={diagramObjects.participants}
                             onClose={() => setSelectedObject(null)}
                             code={code}
                             onCodeChange={onCodeChange}
