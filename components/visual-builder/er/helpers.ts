@@ -259,3 +259,10 @@ export const deleteRelationship = (code: string, lineIndex: number): string => {
     }
     return lines.join('\n');
 };
+
+export const addRelationship = (code: string, entity1: string, entity2: string): string => {
+    const lines = code.split('\n');
+    const newRelLine = `    ${entity1} ||--|| ${entity2} : "relates"`;
+    lines.push(newRelLine);
+    return lines.join('\n');
+};

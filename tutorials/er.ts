@@ -6,7 +6,7 @@ export const erTutorial: TutorialContent = {
   categories: [
     {
       title: 'Entities and Relationships',
-      id: 'Entities & Relationships',
+      id: 'entities-relationships',
       steps: [
         {
           title: 'Defining Entities and Relationships',
@@ -99,7 +99,7 @@ export const erTutorial: TutorialContent = {
             description: 'Control the layout orientation of your diagram with the `direction` keyword. Supported directions are `TB` (Top to Bottom), `BT` (Bottom to Top), `LR` (Left to Right), and `RL` (Right to Left).',
             code: `erDiagram
     direction LR
-    A -- B`
+    A ||--|| B : relates`
           },
           {
             title: 'Styling with `style` and `classDef`',

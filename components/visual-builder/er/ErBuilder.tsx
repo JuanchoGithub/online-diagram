@@ -11,6 +11,7 @@ import {
     addEntity,
     deleteEntity,
     deleteRelationship,
+    addRelationship,
     type SelectedObject,
 } from './helpers';
 import { ConfirmationModal } from '../../ConfirmationModal';
@@ -47,6 +48,13 @@ export const ErBuilder: React.FC<ErBuilderProps> = ({ code, onCodeChange, theme,
         onConfirm: () => {},
         onClose: () => {},
     });
+
+    const [linkingTargetId, setLinkingTargetId] = useState<string | null>(null);
+    const [linkingState, setLinkingState] = useState<{
+        startEntityId: string | null;
+        startPoint: { x: number; y: number } | null;
+        endPoint: { x: number; y: number } | null;
+    }>({ startEntityId: null, startPoint: null, endPoint: null });
 
     const hoveredElementRef = useRef<Element | null>(null);
     const svgContainerRef = useRef<HTMLDivElement>(null);
@@ -204,6 +212,20 @@ export const ErBuilder: React.FC<ErBuilderProps> = ({ code, onCodeChange, theme,
         }
     }, [selectedObject, svgContent]);
 
+    useEffect(() => {
+        if (!svgContainerRef.current) return;
+        const previousTarget = svgContainerRef.current.querySelector('.linking-target');
+        if (previousTarget) {
+            previousTarget.classList.remove('linking-target');
+        }
+        if (linkingTargetId) {
+            const newTarget = svgContainerRef.current.querySelector(`[data-id="${CSS.escape(linkingTargetId)}"]`);
+            if (newTarget) {
+                newTarget.classList.add('linking-target');
+            }
+        }
+    }, [linkingTargetId, svgContent]);
+
     const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
         if (isPanMode) {
             if (e.button !== 0) return;
@@ -213,6 +235,23 @@ export const ErBuilder: React.FC<ErBuilderProps> = ({ code, onCodeChange, theme,
             return;
         }
         dragStartPointRef.current = { x: e.clientX, y: e.clientY, target: e.target as HTMLElement };
+
+        const entityEl = (e.target as HTMLElement).closest<HTMLElement>('[data-id^="entity-"]');
+        if (entityEl && entityEl.dataset.id) {
+            e.preventDefault();
+            const containerRect = e.currentTarget.getBoundingClientRect();
+            const nodeRect = entityEl.getBoundingClientRect();
+            const startPoint = {
+                x: nodeRect.left + nodeRect.width / 2 - containerRect.left,
+                y: nodeRect.top + nodeRect.height / 2 - containerRect.top,
+            };
+    
+            setLinkingState({
+                startEntityId: entityEl.dataset.id,
+                startPoint: startPoint,
+                endPoint: startPoint,
+            });
+        }
     };
 
     const handleMouseOver = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -237,6 +276,23 @@ export const ErBuilder: React.FC<ErBuilderProps> = ({ code, onCodeChange, theme,
             const newX = e.clientX - startPoint.x;
             const newY = e.clientY - startPoint.y;
             setTransform(t => ({...t, x: newX, y: newY}));
+            return;
+        }
+
+        if (linkingState.startEntityId) {
+            const containerRect = e.currentTarget.getBoundingClientRect();
+            const endPoint = { 
+                x: e.clientX - containerRect.left, 
+                y: e.clientY - containerRect.top 
+            };
+            setLinkingState(prev => (prev.startEntityId ? { ...prev, endPoint } : prev));
+    
+            const endGroup = (e.target as HTMLElement).closest<HTMLElement>('[data-id^="entity-"]');
+            if (endGroup && endGroup.dataset.id && endGroup.dataset.id !== linkingState.startEntityId) {
+                setLinkingTargetId(endGroup.dataset.id);
+            } else {
+                setLinkingTargetId(null);
+            }
         }
     };
     
@@ -246,8 +302,23 @@ export const ErBuilder: React.FC<ErBuilderProps> = ({ code, onCodeChange, theme,
             return;
         }
 
+        if (linkingState.startEntityId) {
+            if (linkingTargetId) {
+                const startEntity = diagramObjects.entities.find(e => e.id === linkingState.startEntityId);
+                const endEntity = diagramObjects.entities.find(e => e.id === linkingTargetId);
+                if (startEntity && endEntity) {
+                    const newCode = addRelationship(code, startEntity.name, endEntity.name);
+                    onCodeChange(newCode);
+                    showToast(`Linked ${startEntity.name} to ${endEntity.name}`, 'success');
+                }
+            }
+            setLinkingState({ startEntityId: null, startPoint: null, endPoint: null });
+            setLinkingTargetId(null);
+            dragStartPointRef.current = null;
+            return;
+        }
+    
         if (!dragStartPointRef.current) return;
-
         const dragDistance = Math.sqrt(
             Math.pow(e.clientX - dragStartPointRef.current.x, 2) +
             Math.pow(e.clientY - dragStartPointRef.current.y, 2)
@@ -279,6 +350,10 @@ export const ErBuilder: React.FC<ErBuilderProps> = ({ code, onCodeChange, theme,
             hoveredElementRef.current.classList.remove('hovered-object');
             hoveredElementRef.current = null;
         }
+        if (linkingState.startEntityId) {
+            setLinkingState({ startEntityId: null, startPoint: null, endPoint: null });
+            setLinkingTargetId(null);
+        }
     };
     
     const handleWheel = (e: React.WheelEvent) => {
@@ -301,6 +376,42 @@ export const ErBuilder: React.FC<ErBuilderProps> = ({ code, onCodeChange, theme,
     const zoomOut = () => setTransform(t => ({ ...t, scale: Math.max(t.scale - 0.2, 0.1) }));
     const resetTransform = () => setTransform({ scale: 1, x: 0, y: 0 });
     
+    const handleFitToScreen = useCallback(() => {
+        if (!svgContainerRef.current) return;
+        const wrapper = svgContainerRef.current.children[0] as HTMLDivElement;
+        const mainGroup = wrapper?.querySelector('svg g');
+        if (!mainGroup) return;
+    
+        const groupRect = mainGroup.getBoundingClientRect();
+        const containerRect = svgContainerRef.current.getBoundingClientRect();
+    
+        if (groupRect.width === 0 || groupRect.height === 0) return;
+    
+        const intrinsicWidth = groupRect.width / transform.scale;
+        const intrinsicHeight = groupRect.height / transform.scale;
+        
+        const intrinsicLeft = (groupRect.left - containerRect.left - transform.x) / transform.scale;
+        const intrinsicTop = (groupRect.top - containerRect.top - transform.y) / transform.scale;
+    
+        const padding = 40;
+        const availableWidth = containerRect.width - padding;
+        const availableHeight = containerRect.height - padding;
+    
+        const newScale = Math.min(
+            availableWidth / intrinsicWidth,
+            availableHeight / intrinsicHeight,
+            2
+        );
+    
+        const intrinsicCenterX = intrinsicLeft + intrinsicWidth / 2;
+        const intrinsicCenterY = intrinsicTop + intrinsicHeight / 2;
+    
+        const newX = (containerRect.width / 2) - (intrinsicCenterX * newScale);
+        const newY = (containerRect.height / 2) - (intrinsicCenterY * newScale);
+    
+        setTransform({ scale: newScale, x: newX, y: newY });
+    }, [transform]);
+
     const handleAddEntity = () => {
         const newCode = addEntity(code, `NewEntity${diagramObjects.entities.length + 1}`);
         onCodeChange(newCode);
@@ -320,7 +431,7 @@ export const ErBuilder: React.FC<ErBuilderProps> = ({ code, onCodeChange, theme,
                             onClick={() => setIsPanMode(!isPanMode)}
                             className={isPanMode ? '!bg-indigo-500' : ''}
                             aria-label="Toggle Pan Mode (V)"
-                            iconName="hand"
+                            iconName="pan"
                             tooltipText="Pan (V)"
                         />
                          <div className="border-l border-gray-600 h-6 mx-1"></div>
@@ -352,6 +463,11 @@ export const ErBuilder: React.FC<ErBuilderProps> = ({ code, onCodeChange, theme,
                         outline-offset: 2px;
                         border-radius: 4px;
                     }
+                    .linking-target {
+                        outline: 3px solid #F59E0B; /* Amber-500 */
+                        outline-offset: 4px;
+                        border-radius: 4px;
+                    }
                     .visual-canvas svg {
                         max-width: none; max-height: none; height: auto; overflow: visible;
                     }
@@ -369,7 +485,7 @@ export const ErBuilder: React.FC<ErBuilderProps> = ({ code, onCodeChange, theme,
                     onMouseOver={handleMouseOver}
                     onWheel={handleWheel}
                     className="w-full h-full p-4 visual-canvas flex-grow relative grid place-items-center overflow-hidden"
-                    style={{ cursor: isPanMode ? (isPanning ? 'grabbing' : 'grab') : 'default' }}
+                    style={{ cursor: isPanMode ? (isPanning ? 'grabbing' : 'grab') : (linkingState.startEntityId ? 'crosshair' : 'default') }}
                 >
                     <div
                         style={{
@@ -397,8 +513,25 @@ export const ErBuilder: React.FC<ErBuilderProps> = ({ code, onCodeChange, theme,
                     <div className="absolute bottom-4 right-4 z-10 flex items-center gap-1 bg-gray-900/50 p-1 rounded-lg">
                         <Button onClick={zoomIn} className="!p-2" title="Zoom In"><Icon name="zoom-in" className="w-4 h-4" /></Button>
                         <Button onClick={zoomOut} className="!p-2" title="Zoom Out"><Icon name="zoom-out" className="w-4 h-4" /></Button>
+                        <Button onClick={handleFitToScreen} className="!p-2" title="Fit to Screen"><Icon name="maximize" className="w-4 h-4" /></Button>
                         <Button onClick={resetTransform} className="!p-2" title="Reset View"><Icon name="refresh-cw" className="w-4 h-4" /></Button>
                     </div>
+
+                    {linkingState.startEntityId && linkingState.startPoint && linkingState.endPoint && (
+                        <svg overflow="visible" className="absolute top-0 left-0 w-full h-full pointer-events-none z-10">
+                            <line
+                                x1={linkingState.startPoint.x}
+                                y1={linkingState.startPoint.y}
+                                x2={linkingState.endPoint.x}
+                                y2={linkingState.endPoint.y}
+                                stroke="rgb(129 140 248)"
+                                strokeWidth="3"
+                                strokeDasharray="8 4"
+                                strokeLinecap="round"
+                            />
+                            <circle cx={linkingState.endPoint.x} cy={linkingState.endPoint.y} r="5" fill="rgb(129 140 248)" />
+                        </svg>
+                    )}
                 </div>
             </main>
             

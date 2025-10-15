@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Icon } from './Icon';
 import { Button } from './Button';
@@ -217,6 +218,42 @@ export const DiagramPreview: React.FC<DiagramPreviewProps> = ({ code, showToast,
     const zoomIn = () => setTransform(t => ({ ...t, scale: Math.min(t.scale + 0.2, 5) }));
     const zoomOut = () => setTransform(t => ({ ...t, scale: Math.max(t.scale - 0.2, 0.1) }));
     const resetTransform = () => setTransform({ scale: 1, x: 0, y: 0 });
+
+    const handleFitToScreen = useCallback(() => {
+        if (!previewRef.current) return;
+        const wrapper = previewRef.current.children[1] as HTMLDivElement;
+        const mainGroup = wrapper?.querySelector('svg g');
+        if (!mainGroup) return;
+
+        const groupRect = mainGroup.getBoundingClientRect();
+        const containerRect = previewRef.current.getBoundingClientRect();
+
+        if (groupRect.width === 0 || groupRect.height === 0) return;
+
+        const intrinsicWidth = groupRect.width / transform.scale;
+        const intrinsicHeight = groupRect.height / transform.scale;
+        
+        const intrinsicLeft = (groupRect.left - containerRect.left - transform.x) / transform.scale;
+        const intrinsicTop = (groupRect.top - containerRect.top - transform.y) / transform.scale;
+
+        const padding = 40;
+        const availableWidth = containerRect.width - padding;
+        const availableHeight = containerRect.height - padding;
+
+        const newScale = Math.min(
+            availableWidth / intrinsicWidth,
+            availableHeight / intrinsicHeight,
+            2 
+        );
+
+        const intrinsicCenterX = intrinsicLeft + intrinsicWidth / 2;
+        const intrinsicCenterY = intrinsicTop + intrinsicHeight / 2;
+
+        const newX = (containerRect.width / 2) - (intrinsicCenterX * newScale);
+        const newY = (containerRect.height / 2) - (intrinsicCenterY * newScale);
+
+        setTransform({ scale: newScale, x: newX, y: newY });
+    }, [transform]);
     
     const containerClasses = isMaximized
         ? "fixed inset-0 bg-gray-900/90 backdrop-blur-sm z-[100] flex flex-col"
@@ -249,6 +286,7 @@ export const DiagramPreview: React.FC<DiagramPreviewProps> = ({ code, showToast,
                  <div className="absolute bottom-4 right-4 z-10 flex items-center gap-1 bg-gray-900/50 p-1 rounded-lg">
                     <Button onClick={zoomIn} className="!p-2" title="Zoom In"><Icon name="zoom-in" className="w-4 h-4" /></Button>
                     <Button onClick={zoomOut} className="!p-2" title="Zoom Out"><Icon name="zoom-out" className="w-4 h-4" /></Button>
+                    <Button onClick={handleFitToScreen} className="!p-2" title="Fit to Screen"><Icon name="maximize" className="w-4 h-4" /></Button>
                     <Button onClick={resetTransform} className="!p-2" title="Reset View"><Icon name="refresh-cw" className="w-4 h-4" /></Button>
                 </div>
 
